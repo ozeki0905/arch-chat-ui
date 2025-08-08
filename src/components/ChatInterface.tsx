@@ -281,9 +281,9 @@ export default function ChatInterface() {
 
   return (
     <TooltipProvider>
-      <div className="w-full h-screen grid grid-cols-1 lg:grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px] overflow-hidden bg-background">
+      <div className="w-full h-screen grid grid-cols-1 lg:grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px] bg-background">
         {/* 左：チャット領域 */}
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full overflow-hidden">
           {/* ヘッダー */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b glass animate-in">
             <div className="flex items-center gap-3">
@@ -436,7 +436,7 @@ export default function ChatInterface() {
         </div>
 
         {/* 右：進捗・条件パネル（デスクトップ用） */}
-        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden lg:flex animate-in">
+        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden lg:flex animate-in overflow-hidden">
           <div className="px-6 py-4 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
