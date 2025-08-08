@@ -436,7 +436,7 @@ export default function ChatInterface() {
         </div>
 
         {/* 右：進捗・条件パネル（デスクトップ用） */}
-        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden lg:flex animate-in overflow-hidden">
+        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden lg:flex animate-in">
           <div className="px-6 py-4 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
