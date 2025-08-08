@@ -247,6 +247,9 @@ export default function ChatInterface() {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="right" className="w-[90vw] max-w-[420px] p-0">
+                  <SheetHeader className="sr-only">
+                    <SheetTitle>進捗パネル</SheetTitle>
+                  </SheetHeader>
                   <MobileProgressPanel phases={phases} phaseProgress={phaseProgress} />
                 </SheetContent>
               </Sheet>
