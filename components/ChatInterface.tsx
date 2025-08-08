@@ -7,15 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { 
-  Send, Paperclip, FileUp, Settings, Download, Loader2, CheckCircle2, AlertCircle,
-  ChevronDown, ChevronRight, MessageSquare, Bot, User, Trash2, Play, Pause, RefreshCw
+import {
+  Send, FileUp, Settings, Download, Loader2, CheckCircle2, AlertCircle,
+  ChevronRight, MessageSquare, Bot, User, Trash2, Play, Pause, RefreshCw
 } from "lucide-react";
 
 // --- 型定義（必要に応じて拡張） ---
@@ -26,7 +25,7 @@ type ChatMessage = {
   role: Role;
   content: string;
   files?: UploadedFile[];
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 };
 
 type UploadedFile = {
@@ -59,6 +58,12 @@ type CalcStep = {
   note?: string;
 };
 
+type Phase = {
+  key: string;
+  label: string;
+  status: "pending" | "current" | "done";
+};
+
 // --- モック初期値（後でAPI連携に差し替え） ---
 const initialRequirements: Requirement[] = [
   { key: "site", label: "敷地情報（住所・座標・用途地域）", required: true, status: "partial", note: "住所のみ取得" },
@@ -84,8 +89,19 @@ const initialCalc: CalcStep[] = [
   { key: "energySim", label: "省エネ簡易計算", status: "pending" },
 ];
 
+const initialPhases: Phase[] = [
+  { key: "p1", label: "①対象の確認", status: "current" },
+  { key: "p2", label: "②設計方針の決定", status: "pending" },
+  { key: "p3", label: "③設計条件設定", status: "pending" },
+  { key: "p4", label: "④設計計算の実施", status: "pending" },
+  { key: "p5", label: "⑤評価の実施", status: "pending" },
+  { key: "p6", label: "⑥概算コスト工期算定", status: "pending" },
+  { key: "p7", label: "⑦市場性と収益構造の具体分析", status: "pending" },
+  { key: "p8", label: "⑧サマリ", status: "pending" },
+];
+
 // --- ユーティリティ ---
-const formatBytes = (bytes: number) => {
+const formatBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
@@ -105,16 +121,31 @@ export default function ChatInterface() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [input, setInput] = useState("");
   const [requirements, setRequirements] = useState<Requirement[]>(initialRequirements);
-  const [design, setDesign] = useState<DesignCondition[]>(initialDesign);
+  const [design] = useState<DesignCondition[]>(initialDesign);
   const [calc, setCalc] = useState<CalcStep[]>(initialCalc);
+  const [phases, setPhases] = useState<Phase[]>(initialPhases);
   const [isRunning, setIsRunning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const overallProgress = Math.round(
-    calc.reduce((acc, s) => acc + (s.progress ?? (s.status === "done" ? 100 : 0)), 0) / (calc.length || 1)
+  const phaseProgress = Math.round(
+    (phases.filter((p) => p.status === "done").length / phases.length) * 100
   );
+  const currentPhase = phases.find((p) => p.status === "current");
 
-  const handleSend = () => {
+  const goNextPhase = (): void => {
+    setPhases((prev) => {
+      const idx = prev.findIndex((p) => p.status === "current");
+      return prev.map((p, i) =>
+        i === idx
+          ? { ...p, status: "done" }
+          : i === idx + 1
+          ? { ...p, status: "current" }
+          : p
+      );
+    });
+  };
+
+  const handleSend = (): void => {
     if (!input && files.length === 0) return;
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -141,7 +172,7 @@ export default function ChatInterface() {
     }, 600);
   };
 
-  const handleFiles = (fls: FileList | null) => {
+  const handleFiles = (fls: FileList | null): void => {
     if (!fls) return;
     const next: UploadedFile[] = Array.from(fls).map((f) => ({ id: crypto.randomUUID(), name: f.name, size: f.size, type: f.type }));
     setFiles((prev) => [...prev, ...next]);
@@ -149,7 +180,7 @@ export default function ChatInterface() {
 
   const removeFile = (id: string) => setFiles((prev) => prev.filter((f) => f.id !== id));
 
-  const toggleRun = () => {
+  const toggleRun = (): void => {
     if (!isRunning) {
       setIsRunning(true);
       // 疑似的に進捗を動かす
@@ -170,7 +201,7 @@ export default function ChatInterface() {
     }
   };
 
-  const requirementStatusBadge = (s: Requirement["status"]) => {
+  const requirementStatusBadge = (s: Requirement["status"]): JSX.Element => {
     const map: Record<Requirement["status"], { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
       missing: { variant: "destructive", label: "未" },
       partial: { variant: "secondary", label: "一部" },
@@ -180,7 +211,7 @@ export default function ChatInterface() {
     return <Badge variant={v.variant}>{v.label}</Badge>;
   };
 
-  const calcStepIcon = (s: CalcStep["status"]) => {
+  const calcStepIcon = (s: CalcStep["status"]): JSX.Element => {
     switch (s) {
       case "done":
         return <CheckCircle2 className="h-4 w-4" />;
@@ -216,7 +247,7 @@ export default function ChatInterface() {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="right" className="w-[90vw] max-w-[420px] p-0">
-                  <MobileProgressPanel requirements={requirements} design={design} calc={calc} overallProgress={overallProgress} />
+                  <MobileProgressPanel phases={phases} phaseProgress={phaseProgress} />
                 </SheetContent>
               </Sheet>
               <Sheet>
@@ -269,6 +300,7 @@ export default function ChatInterface() {
           {/* メッセージリスト */}
           <ScrollArea className="flex-1 px-4 animate-fade-in-up">
             <div className="max-w-4xl mx-auto py-4 space-y-4 px-2 sm:px-0">
+              {currentPhase && <PhaseForm phase={currentPhase} onNext={goNextPhase} />}
               {messages.map((m) => (
                 <ChatBubble key={m.id} role={m.role} content={m.content} files={m.files} />
               ))}
@@ -345,12 +377,22 @@ export default function ChatInterface() {
             <div className="space-y-4">
             <Card className="shadow-lg hover-lift animate-in">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">全体進捗</CardTitle>
+                <CardTitle className="text-sm">フェーズ進捗</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-3">
-                  <Progress value={overallProgress} className="h-3" />
-                  <div className="text-sm font-bold w-12 text-right gradient-primary bg-clip-text text-transparent">{overallProgress}%</div>
+                  <Progress value={phaseProgress} className="h-3" />
+                  <div className="text-sm font-bold w-12 text-right gradient-primary bg-clip-text text-transparent">{phaseProgress}%</div>
+                </div>
+                <div className="mt-3 space-y-1">
+                  {phases.map((p) => (
+                    <div key={p.key} className="flex items-center justify-between text-sm">
+                      <span>{p.label}</span>
+                      <Badge variant={p.status === "done" ? "default" : p.status === "current" ? "secondary" : "outline"}>
+                        {p.status === "done" ? "済" : p.status === "current" ? "進行中" : "未"}
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -447,13 +489,29 @@ export default function ChatInterface() {
   );
 }
 
+// --- サブ：フェーズ入力フォーム ---
+function PhaseForm({ phase, onNext }: { phase: Phase; onNext: () => void }): JSX.Element {
+  return (
+    <Card className="shadow-lg hover-lift animate-in">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">{phase.label}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <Input placeholder="入力してください" />
+        <Textarea placeholder="補足情報" />
+        <div className="flex justify-end">
+          <Button size="sm" onClick={onNext}>次へ</Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // --- サブ：モバイル用プログレスパネル ---
-function MobileProgressPanel({ requirements, design, calc, overallProgress }: {
-  requirements: Requirement[];
-  design: DesignCondition[];
-  calc: CalcStep[];
-  overallProgress: number;
-}) {
+function MobileProgressPanel({ phases, phaseProgress }: {
+  phases: Phase[];
+  phaseProgress: number;
+}): JSX.Element {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-4 border-b bg-card/50">
@@ -466,12 +524,22 @@ function MobileProgressPanel({ requirements, design, calc, overallProgress }: {
         <div className="space-y-4">
           <Card className="shadow-lg hover-lift animate-in">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">全体進捗</CardTitle>
+              <CardTitle className="text-sm">フェーズ進捗</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-3">
-                <Progress value={overallProgress} className="h-3" />
-                <div className="text-sm font-bold w-12 text-right gradient-primary bg-clip-text text-transparent">{overallProgress}%</div>
+                <Progress value={phaseProgress} className="h-3" />
+                <div className="text-sm font-bold w-12 text-right gradient-primary bg-clip-text text-transparent">{phaseProgress}%</div>
+              </div>
+              <div className="mt-3 space-y-1">
+                {phases.map((p) => (
+                  <div key={p.key} className="flex items-center justify-between text-sm">
+                    <span>{p.label}</span>
+                    <Badge variant={p.status === "done" ? "default" : p.status === "current" ? "secondary" : "outline"}>
+                      {p.status === "done" ? "済" : p.status === "current" ? "進行中" : "未"}
+                    </Badge>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -483,9 +551,8 @@ function MobileProgressPanel({ requirements, design, calc, overallProgress }: {
 }
 
 // --- サブ：チャットバブル ---
-function ChatBubble({ role, content, files }: { role: Role; content: string; files?: UploadedFile[] }) {
+function ChatBubble({ role, content, files }: { role: Role; content: string; files?: UploadedFile[] }): JSX.Element {
   const isUser = role === "user";
-  const isAssistant = role === "assistant";
   return (
     <div className={`flex items-start gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
