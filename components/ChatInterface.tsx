@@ -384,6 +384,11 @@ export default function ChatInterface() {
                   <Progress value={phaseProgress} className="h-3" />
                   <div className="text-sm font-bold w-12 text-right gradient-primary bg-clip-text text-transparent">{phaseProgress}%</div>
                 </div>
+                {currentPhase && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    現在: <span className="font-medium text-foreground">{currentPhase.label}</span>
+                  </div>
+                )}
                 <div className="mt-3 space-y-1">
                   {phases.map((p) => (
                     <div key={p.key} className="flex items-center justify-between text-sm">
@@ -512,6 +517,7 @@ function MobileProgressPanel({ phases, phaseProgress }: {
   phases: Phase[];
   phaseProgress: number;
 }) {
+  const currentPhase = phases.find((p) => p.status === "current");
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-4 border-b bg-card/50">
@@ -531,6 +537,11 @@ function MobileProgressPanel({ phases, phaseProgress }: {
                 <Progress value={phaseProgress} className="h-3" />
                 <div className="text-sm font-bold w-12 text-right gradient-primary bg-clip-text text-transparent">{phaseProgress}%</div>
               </div>
+              {currentPhase && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  現在: <span className="font-medium text-foreground">{currentPhase.label}</span>
+                </div>
+              )}
               <div className="mt-3 space-y-1">
                 {phases.map((p) => (
                   <div key={p.key} className="flex items-center justify-between text-sm">
