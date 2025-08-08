@@ -18,8 +18,10 @@ import {
   FileSearch
 } from "lucide-react";
 import { DocumentAnalysisDialog } from "@/components/DocumentAnalysisDialog";
-import { DocumentAnalysisResult, ExtractedItem } from "@/types/extraction";
+import { DocumentAnalysisResult, ExtractedItem, ProjectInfo } from "@/types/extraction";
 import { analyzeDocument } from "@/utils/documentParser";
+import { Phase2Form } from "@/components/Phase2Form";
+import { DesignPolicy } from "@/types/designPolicy";
 
 // --- 型定義（必要に応じて拡張） ---
 type Role = "user" | "assistant" | "system";
@@ -131,6 +133,10 @@ export default function ChatInterface() {
   const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<DocumentAnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // フェーズ2: 設計方針関連の状態
+  const [projectInfo, setProjectInfo] = useState<Partial<ProjectInfo>>({});
+  const [showPhase2Form, setShowPhase2Form] = useState(false);
 
   const phaseProgress = Math.round(
     (phases.filter((p) => p.status === "done").length / phases.length) * 100
@@ -179,6 +185,11 @@ export default function ChatInterface() {
   
   // ドキュメント解析結果の確認
   const handleAnalysisConfirm = (items: ExtractedItem[]): void => {
+    // プロジェクト情報を保存
+    if (currentAnalysis?.projectInfo) {
+      setProjectInfo(currentAnalysis.projectInfo);
+    }
+    
     // 抽出された情報をRequirementに反映
     const updatedRequirements = requirements.map(req => {
       const extractedItem = items.find(item => 
@@ -209,6 +220,38 @@ export default function ChatInterface() {
         .join("\n")}\n\n抽出された情報を確認し、不足している項目があれば追加入力してください。`,
     };
     setMessages(prev => [...prev, assistantMsg]);
+    
+    // フェーズ1完了時、自動的にフェーズ2へ
+    if (currentPhase?.key === "p1") {
+      setTimeout(() => {
+        goNextPhase();
+        setShowPhase2Form(true);
+      }, 1000);
+    }
+  };
+  
+  // フェーズ2: 設計方針の確定
+  const handlePhase2Complete = (policy: DesignPolicy): void => {
+    setShowPhase2Form(false);
+    
+    // 設計方針を設計条件に反映
+    setDesign(prev => prev.map(d => {
+      if (d.key === "structureType" && policy.structureType) {
+        return { ...d, value: policy.structureType, status: "set" };
+      }
+      return d;
+    }));
+    
+    // アシスタントメッセージを追加
+    const assistantMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: `設計方針が確定しました:\n\n• 基礎形式: ${policy.foundationType}\n• 耐震レベル: ${policy.seismicLevel}\n• 構造種別: ${policy.structureType}\n• 耐火性能: ${policy.fireResistance}\n\n次のフェーズで詳細な設計条件を設定します。`,
+    };
+    setMessages(prev => [...prev, assistantMsg]);
+    
+    // 次のフェーズへ
+    goNextPhase();
   };
 
   const handleFiles = async (fls: FileList | null): Promise<void> => {
@@ -374,9 +417,40 @@ export default function ChatInterface() {
                   )}
                 </div>
               )}
+              
+              {/* フェーズ2フォームの表示 */}
+              {showPhase2Form && currentPhase?.key === "p2" && (
+                <div className="max-w-3xl mx-auto">
+                  <Phase2Form
+                    projectInfo={projectInfo}
+                    onComplete={handlePhase2Complete}
+                    onBack={() => setShowPhase2Form(false)}
+                  />
+                </div>
+              )}
               {messages.map((msg) => (
                 <ChatBubble key={msg.id} role={msg.role} content={msg.content} files={msg.files} />
               ))}
+              
+              {/* フェーズ2への誘導 */}
+              {currentPhase?.key === "p2" && !showPhase2Form && messages.length > 0 && (
+                <div className="max-w-3xl mx-auto">
+                  <Card className="shadow-lg hover-lift animate-in">
+                    <CardContent className="py-6">
+                      <div className="text-center">
+                        <Settings className="h-8 w-8 mx-auto mb-3 text-primary" />
+                        <h3 className="text-lg font-semibold mb-2">設計方針を決定する</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          抽出された情報をもとに、最適な設計基準と方針を推定します
+                        </p>
+                        <Button onClick={() => setShowPhase2Form(true)}>
+                          設計方針の検討を開始
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
               {(isLoading || isAnalyzing) && (
                 <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
                   <Loader2 className="h-4 w-4 animate-spin" />
