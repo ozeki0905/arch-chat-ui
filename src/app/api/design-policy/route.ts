@@ -1,56 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DesignPolicyEstimation, DesignBasis, DesignOption, ConflictItem } from "@/types/designPolicy";
 import { ProjectInfo } from "@/types/extraction";
-import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// OpenAI APIを使用して設計方針を推定
+// 設計方針を推定する関数
 async function estimateDesignPolicy(projectInfo: Partial<ProjectInfo>): Promise<DesignPolicyEstimation> {
-  try {
-    // LLMに推定を依頼
-    const prompt = `
-以下のプロジェクト情報に基づいて、建築設計の方針を推定してください。
-
-プロジェクト情報:
-${JSON.stringify(projectInfo, null, 2)}
-
-以下の項目について検討してください:
-1. 適用すべき法規・設計基準
-2. 基礎形式の選定（直接基礎/杭基礎）
-3. 耐震設計レベル（レベル1/レベル2）
-4. 構造種別の推奨
-5. 特別な配慮事項
-
-回答は以下の形式で提供してください:
-- 推奨事項とその理由
-- 懸念事項
-- 代替案
-`;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
-      messages: [
-        {
-          role: "system",
-          content: "あなたは建築構造設計の専門家です。与えられたプロジェクト情報から最適な設計方針を提案してください。"
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 2000,
-    });
-
-    const llmResponse = completion.choices[0].message.content || "";
-    
-    // LLMの応答を解析して構造化（実際の実装では応答をパースする必要がありますが、ここではモックデータを使用）
-    // 以下は既存のモックデータを維持しますが、実際にはLLMの応答を解析して生成します
-
   // プロジェクト情報に基づいて推定結果を生成
   const isLargeSite = (projectInfo.siteArea || 0) > 10000;
   const hasWeakGround = projectInfo.siteAddress?.includes("埋立") || projectInfo.siteAddress?.includes("沿岸");
