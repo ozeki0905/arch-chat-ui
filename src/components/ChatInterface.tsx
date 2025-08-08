@@ -31,8 +31,8 @@ type ChatMessage = {
 type UploadedFile = {
   id: string;
   name: string;
-  size: number; // bytes
-  type: string; // mime
+  size: number;
+  type: string;
 };
 
 type Requirement = {
@@ -46,7 +46,7 @@ type Requirement = {
 type DesignCondition = {
   key: string;
   label: string;
-  value?: string;
+  value: string;
   status: "unset" | "set" | "auto";
 };
 
@@ -54,7 +54,7 @@ type CalcStep = {
   key: string;
   label: string;
   status: "pending" | "running" | "done" | "error";
-  progress?: number; // 0-100
+  progress?: number;
   note?: string;
 };
 
@@ -111,21 +111,17 @@ const formatBytes = (bytes: number): string => {
 
 // --- メインコンポーネント ---
 export default function ChatInterface() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "m1",
-      role: "system",
-      content: "ようこそ。テキストや図面・仕様書などのファイルを投入すると、法規チェック・ボリューム試算・構造初期設計・省エネ簡易計算まで自動で進み、結果をファイルで出力します。まずは敷地情報と要求条件をご提示ください。",
-    },
-  ]);
-  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [requirements, setRequirements] = useState<Requirement[]>(initialRequirements);
-  const [design] = useState<DesignCondition[]>(initialDesign);
+  const [design, setDesign] = useState<DesignCondition[]>(initialDesign);
   const [calc, setCalc] = useState<CalcStep[]>(initialCalc);
   const [phases, setPhases] = useState<Phase[]>(initialPhases);
   const [isRunning, setIsRunning] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const phaseProgress = Math.round(
     (phases.filter((p) => p.status === "done").length / phases.length) * 100
@@ -300,83 +296,86 @@ export default function ChatInterface() {
             </div>
           </div>
 
-          {/* メッセージリスト */}
-          <ScrollArea className="flex-1 px-4 animate-fade-in-up">
-            <div className="max-w-4xl mx-auto py-4 space-y-4 px-2 sm:px-0">
-              {currentPhase && <PhaseForm phase={currentPhase} onNext={goNextPhase} />}
-              {messages.map((m) => (
-                <ChatBubble key={m.id} role={m.role} content={m.content} files={m.files} />
+          {/* チャット表示エリア */}
+          <ScrollArea className="flex-1 p-4 sm:p-6">
+            <div className="space-y-4 max-w-4xl mx-auto animate-slide-up">
+              {messages.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <div className="mb-4 gradient-accent rounded-full p-3 w-16 h-16 mx-auto flex items-center justify-center animate-bounce-in">
+                    <Bot className="h-8 w-8 text-white" />
+                  </div>
+                  <p className="text-lg font-medium mb-2">建築検討アシスタントへようこそ</p>
+                  <p className="text-sm">図面をアップロードするか、プロジェクトの要件を入力してください</p>
+                </div>
+              )}
+              {messages.map((msg) => (
+                <ChatBubble key={msg.id} role={msg.role} content={msg.content} files={msg.files} />
               ))}
+              {isLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">応答を生成中...</span>
+                </div>
+              )}
             </div>
           </ScrollArea>
 
-          {/* コンポーザー */}
-          <div className="border-t">
-            <div className="max-w-4xl mx-auto px-4 py-3">
-              {/* ドロップ領域 */}
-              <div
-                className="border-2 border-dashed rounded-2xl p-6 text-sm text-muted-foreground hover:bg-muted/30 hover:border-primary/50 transition-all duration-300 group"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  handleFiles(e.dataTransfer.files);
-                }}
-              >
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <FileUp className="h-10 w-10 text-muted-foreground/50 group-hover:text-primary transition-colors" />
-                  <span>ファイルをここにドラッグ＆ドロップ、または</span>
-                  <Button variant="link" size="sm" className="px-1 text-primary hover:text-primary/80" onClick={() => fileInputRef.current?.click()}>
-                    クリックして選択
-                  </Button>
-                </div>
-                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
-                {files.length > 0 && (
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {files.map((f) => (
-                      <div key={f.id} className="flex items-center justify-between rounded-xl border p-3 bg-card hover:shadow-md transition-shadow animate-slide-up">
-                        <div className="truncate">
-                          <div className="text-sm font-medium truncate">{f.name}</div>
-                          <div className="text-xs text-muted-foreground">{formatBytes(f.size)} ・ {f.type || "unknown"}</div>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => removeFile(f.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+          {/* 入力エリア */}
+          <div className="border-t bg-card/50 backdrop-blur-sm p-4 sm:p-6 animate-in">
+            {files.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {files.map((f) => (
+                  <div key={f.id} className="flex items-center gap-2 px-3 py-1.5 bg-secondary/50 rounded-full text-sm hover-lift">
+                    <FileUp className="h-3 w-3" />
+                    <span className="max-w-[150px] truncate">{f.name}</span>
+                    <span className="text-xs text-muted-foreground">({formatBytes(f.size)})</span>
+                    <button onClick={() => removeFile(f.id)} className="hover:text-destructive transition-colors">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
                   </div>
-                )}
+                ))}
               </div>
-
-              <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
-                <Textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="例：敷地は東京都大田区羽田空港3-3-2、用途は事務所・延床12,000㎡・8階想定。既存地盤情報PDFを添付します。"
-                  className="min-h-[70px] rounded-2xl resize-none"
-                />
-                <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto sm:min-w-[120px]">
-                  <Button onClick={handleSend} className="rounded-2xl gradient-primary text-white hover:opacity-90 transition-all hover-lift">
-                    <Send className="h-4 w-4 mr-2"/>送信
-                  </Button>
-                  <Button variant="outline" className="rounded-2xl hover:bg-primary/10 hover:border-primary transition-all" onClick={toggleRun}>
-                    {isRunning ? <Pause className="h-4 w-4 mr-2"/> : <Play className="h-4 w-4 mr-2"/>}
-                    {isRunning ? "一時停止" : "計算を実行"}
-                  </Button>
-                </div>
-              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={(e) => handleFiles(e.target.files)}
+                multiple
+                className="hidden"
+                accept=".pdf,.dwg,.dxf,.xlsx,.xls,.png,.jpg,.jpeg"
+              />
+              <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} className="hover-lift">
+                <FileUp className="h-4 w-4" />
+              </Button>
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.metaKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="建築要件やファイルをここに入力..."
+                className="flex-1 min-h-[40px] max-h-[120px] resize-none"
+              />
+              <Button onClick={handleSend} disabled={!input && files.length === 0} className="gradient-primary text-white hover:opacity-90 transition-opacity hover-lift">
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* 右：進捗/条件パネル */}
-        <div className="hidden lg:flex flex-col h-full border-l bg-muted/30 glass-dark">
-          <div className="px-4 py-4 border-b bg-card/50">
+        {/* 右：進捗・条件パネル（デスクトップ用） */}
+        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden lg:flex animate-in">
+          <div className="px-6 py-4 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
               進捗・条件
             </h2>
           </div>
-          <ScrollArea className="flex-1 px-4 py-4">
+          <ScrollArea className="flex-1 px-6 py-4">
             <div className="space-y-4">
             <Card className="shadow-lg hover-lift animate-in">
               <CardHeader className="pb-2">
@@ -392,16 +391,28 @@ export default function ChatInterface() {
                     現在: <span className="font-medium text-foreground">{currentPhase.label}</span>
                   </div>
                 )}
-                <div className="mt-3 space-y-1">
-                  {phases.map((p) => (
-                    <div key={p.key} className="flex items-center justify-between text-sm">
-                      <span>{p.label}</span>
-                      <Badge variant={p.status === "done" ? "default" : p.status === "current" ? "secondary" : "outline"}>
-                        {p.status === "done" ? "済" : p.status === "current" ? "進行中" : "未"}
-                      </Badge>
-                    </div>
-                  ))}
+                <div className="mt-3">
+                  <Accordion type="single" collapsible>
+                    <AccordionItem value="phases" className="border-none">
+                      <AccordionTrigger className="text-xs py-2 hover:no-underline">
+                        全フェーズを表示
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-1">
+                          {phases.map((p) => (
+                            <div key={p.key} className="flex items-center justify-between text-sm">
+                              <span>{p.label}</span>
+                              <Badge variant={p.status === "done" ? "default" : p.status === "current" ? "secondary" : "outline"}>
+                                {p.status === "done" ? "済" : p.status === "current" ? "進行中" : "未"}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 </div>
+                <Button size="sm" onClick={goNextPhase} className="w-full mt-3">次のフェーズへ</Button>
               </CardContent>
             </Card>
 
@@ -409,18 +420,23 @@ export default function ChatInterface() {
               <CardHeader className="pb-1">
                 <CardTitle className="text-sm">情報回収状況</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {requirements.map((r) => (
-                  <div key={r.key} className="flex items-start justify-between gap-2 py-1">
-                    <div className="text-sm leading-tight">
-                      <div className="font-medium">{r.label}</div>
-                      {r.note && <div className="text-xs text-muted-foreground">{r.note}</div>}
+              <CardContent>
+                <div className="space-y-2">
+                  {requirements.map((r) => (
+                    <div key={r.key} className="flex items-start justify-between gap-2 text-sm">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1">
+                          {r.required && <span className="text-destructive">*</span>}
+                          <span>{r.label}</span>
+                        </div>
+                        {r.note && <div className="text-xs text-muted-foreground mt-0.5">{r.note}</div>}
+                      </div>
+                      {requirementStatusBadge(r.status)}
                     </div>
-                    {requirementStatusBadge(r.status)}
-                  </div>
-                ))}
-                <Separator className="my-2" />
-                <Button variant="outline" size="sm" className="w-full">不足項目を入力</Button>
+                  ))}
+                </div>
+                <Separator className="my-3" />
+                <PhaseForm phase={phases[0]} onNext={goNextPhase} />
               </CardContent>
             </Card>
 
@@ -429,34 +445,34 @@ export default function ChatInterface() {
                 <CardTitle className="text-sm">設計条件</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Accordion type="single" collapsible defaultValue="a0">
-                  <AccordionItem value="a0">
-                    <AccordionTrigger className="text-sm">基本条件</AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-2">
-                        {design.map((d) => (
-                          <div key={d.key} className="flex items-center justify-between gap-2">
-                            <div className="text-sm">{d.label}</div>
-                            <div className="text-sm text-muted-foreground">{d.value || "未設定"}</div>
-                          </div>
-                        ))}
-                        <Button variant="outline" size="sm" className="w-full mt-2">条件を編集</Button>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
+                {design.map((d) => (
+                  <div key={d.key} className="flex items-center justify-between text-sm">
+                    <div>
+                      <span>{d.label}</span>
+                      {d.status === "auto" && <span className="text-xs text-muted-foreground ml-1">(自動)</span>}
+                    </div>
+                    <span className="font-medium">{d.value}</span>
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
             <Card className="shadow-lg hover-lift animate-in">
               <CardHeader className="pb-1">
-                <CardTitle className="text-sm">計算の進捗</CardTitle>
+                <CardTitle className="text-sm flex items-center justify-between">
+                  設計計算
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleRun}>
+                      {isRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-3">
                 {calc.map((c) => (
-                  <div key={c.key} className="rounded-xl border p-3 bg-card hover:shadow-md transition-all hover-lift">
+                  <div key={c.key} className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-sm">
                         {calcStepIcon(c.status)}
                         {c.label}
                       </div>
@@ -587,7 +603,7 @@ function ChatBubble({ role, content, files }: { role: Role; content: string; fil
         )}
       </div>
       {isUser && (
-        <div className="shrink-0 mt-1 rounded-full gradient-accent text-white p-2 shadow-glow animate-bounce-in">
+        <div className="shrink-0 mt-1 rounded-full bg-secondary text-secondary-foreground p-2 animate-bounce-in">
           <User className="h-4 w-4" />
         </div>
       )}
