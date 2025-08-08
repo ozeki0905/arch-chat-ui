@@ -160,7 +160,7 @@ export default function ChatInterface() {
   // 自動スクロール
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages.length]); // メッセージ数が変わった時のみスクロール
   
   // セッションの初期化と読み込み
   useEffect(() => {
@@ -235,9 +235,14 @@ export default function ChatInterface() {
       
       setCurrentSession(updatedSession);
       saveSession(updatedSession);
-      setSessionSummaries(loadSessionSummaries());
     }
   }, [messages, files, projectInfo, currentPhaseLocal]);
+  
+  // セッションサマリーの更新は別のuseEffectで管理
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setSessionSummaries(loadSessionSummaries());
+  }, [currentSession?.id]); // currentSessionのIDが変わった時のみ更新
 
   const goNextPhase = (): void => {
     setPhases((prev) => {
@@ -509,7 +514,6 @@ export default function ChatInterface() {
                 phases.findIndex(ph => ph.key === session.phase) > phases.findIndex(ph => ph.key === p.key) ? "done" : "pending"
       })));
     }
-    setSessionSummaries(loadSessionSummaries());
   };
   
   const handleNewSession = (): void => {
@@ -542,13 +546,11 @@ export default function ChatInterface() {
     
     // セッション一覧を更新
     setSessions(prev => [newSession, ...prev.map(s => ({ ...s, isActive: false }))]);
-    setSessionSummaries(loadSessionSummaries());
   };
   
   const handleDeleteSession = (sessionId: string): void => {
     deleteSession(sessionId);
     setSessions(prev => prev.filter(s => s.id !== sessionId));
-    setSessionSummaries(loadSessionSummaries());
     
     // 削除したセッションが現在のセッションの場合は新規セッションを作成
     if (currentSession?.id === sessionId) {

@@ -41,8 +41,11 @@ export function ChatHistorySidebar({
 }: ChatHistorySidebarProps) {
   const [searchQuery, setSearchQuery] = React.useState("");
   
-  const filteredSessions = sessions.filter(session =>
-    session.title.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredSessions = useMemo(() => 
+    sessions.filter(session =>
+      session.title.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [sessions, searchQuery]
   );
   
   const phaseLabels: Record<string, string> = {
