@@ -25,6 +25,9 @@ import { DesignPolicy } from "@/types/designPolicy";
 import { ChatSession, ChatMessage as SessionChatMessage } from "@/types/chat";
 import { loadSessions, saveSession, generateSessionTitle, deleteSession, loadSessionSummaries } from "@/utils/sessionStorage";
 import { ChatHistorySidebar, MobileChatHistorySidebar } from "@/components/ChatHistorySidebar";
+import { AIAgent, AgentResponse } from "@/services/aiAgent";
+import { SiteInfoForm, BuildingOverviewForm, generateDynamicForm } from "@/components/FormInput";
+import { extractInformation, mergeExtractedItems } from "@/utils/informationExtractor";
 
 // --- 型定義（必要に応じて拡張） ---
 type Role = "user" | "assistant" | "system";
@@ -131,6 +134,11 @@ export default function ChatInterface() {
   // セッション管理
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  
+  // AIエージェント
+  const [aiAgent] = useState(() => new AIAgent());
+  const [showForm, setShowForm] = useState<AgentResponse["suggestedForm"] | null>(null);
+  const [formData, setFormData] = useState<any>(null);
 
   const [requirements, setRequirements] = useState<Requirement[]>(initialRequirements);
   const [design, setDesign] = useState<DesignCondition[]>(initialDesign);
@@ -142,6 +150,7 @@ export default function ChatInterface() {
   const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<DocumentAnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [extractedItems, setExtractedItems] = useState<ExtractedItem[]>([]);
   
   // フェーズ2: 設計方針関連の状態
   const [projectInfo, setProjectInfo] = useState<Partial<ProjectInfo>>({});
@@ -249,9 +258,40 @@ export default function ChatInterface() {
     setInput("");
     setFiles([]);
     setIsLoading(true);
+    setShowForm(null);
 
     try {
-      // API呼び出し
+      // AIエージェントで処理
+      const agentResponse = await aiAgent.processTextInput(input);
+      
+      // アクションを処理
+      for (const action of agentResponse.actions) {
+        switch (action.type) {
+          case "update_status":
+            if (action.payload.extractedItems) {
+              setExtractedItems(action.payload.extractedItems);
+              updateRequirementsFromExtracted(action.payload.extractedItems);
+            }
+            if (action.payload.projectInfo) {
+              setProjectInfo(action.payload.projectInfo);
+            }
+            break;
+          case "proceed_phase":
+            if (action.payload.nextPhase === "p2") {
+              goNextPhase();
+              setShowPhase2Form(true);
+            }
+            break;
+        }
+      }
+      
+      // フォーム表示の判断
+      if (agentResponse.suggestedForm) {
+        setShowForm(agentResponse.suggestedForm);
+        setFormData(agentResponse.formData);
+      }
+      
+      // API呼び出しも並行して実行（既存の機能を維持）
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -280,14 +320,8 @@ export default function ChatInterface() {
       };
       setMessages((prev) => [...prev, assistantMsg]);
       
-      // フェーズに応じた進捗更新
-      if (currentPhaseLocal?.key === "p1") {
-        setCalc((prev) => prev.map((c) => (c.key === "mass" ? { ...c, status: "running", progress: 20 } : c)));
-        setRequirements((prev) => prev.map((r) => (r.key === "program" ? { ...r, status: "partial", note: "延床のみ取得" } : r)));
-      }
     } catch (error) {
       console.error("Chat API error:", error);
-      // エラー時のフォールバック
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -512,6 +546,83 @@ export default function ChatInterface() {
       handleNewSession();
     }
   };
+  
+  // 抽出情報からRequirementsを更新
+  const updateRequirementsFromExtracted = (items: ExtractedItem[]): void => {
+    const updatedRequirements = requirements.map(req => {
+      const extractedItem = items.find(item => 
+        (item.key === "siteAddress" && req.key === "site") ||
+        (item.key === "requiredFloorArea" && req.key === "program") ||
+        (item.key === "landUse" && req.key === "constraints")
+      );
+      
+      if (extractedItem && extractedItem.value) {
+        return {
+          ...req,
+          status: "complete" as const,
+          note: `${extractedItem.value}`
+        };
+      } else if (extractedItem) {
+        return {
+          ...req,
+          status: "partial" as const,
+          note: "情報検出済み（値未抽出）"
+        };
+      }
+      return req;
+    });
+    
+    setRequirements(updatedRequirements);
+  };
+  
+  // フォーム送信処理
+  const handleFormSubmit = async (data: Record<string, string>): Promise<void> => {
+    setShowForm(null);
+    setIsLoading(true);
+    
+    try {
+      const agentResponse = await aiAgent.processFormInput(data);
+      
+      // アクションを処理
+      for (const action of agentResponse.actions) {
+        switch (action.type) {
+          case "update_status":
+            if (action.payload.extractedItems) {
+              setExtractedItems(action.payload.extractedItems);
+              updateRequirementsFromExtracted(action.payload.extractedItems);
+            }
+            if (action.payload.projectInfo) {
+              setProjectInfo(action.payload.projectInfo);
+            }
+            break;
+          case "proceed_phase":
+            if (action.payload.nextPhase === "p2") {
+              goNextPhase();
+              setShowPhase2Form(true);
+            }
+            break;
+        }
+      }
+      
+      // メッセージを追加
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: agentResponse.message,
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+      
+      // 新たなフォームが必要な場合
+      if (agentResponse.suggestedForm) {
+        setShowForm(agentResponse.suggestedForm);
+        setFormData(agentResponse.formData);
+      }
+    } catch (error) {
+      console.error("Form processing error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <TooltipProvider>
@@ -642,6 +753,22 @@ export default function ChatInterface() {
               {messages.map((msg) => (
                 <ChatBubble key={msg.id} role={msg.role} content={msg.content} files={msg.files} />
               ))}
+              
+              {/* フォーム表示 */}
+              {showForm && !isLoading && (
+                <div className="max-w-2xl mx-auto animate-slide-up">
+                  {showForm === "site_info" && (
+                    <SiteInfoForm onSubmit={handleFormSubmit} />
+                  )}
+                  {showForm === "building_overview" && (
+                    <BuildingOverviewForm onSubmit={handleFormSubmit} />
+                  )}
+                  {showForm === "dynamic" && formData?.missingInfo && (
+                    generateDynamicForm(formData.missingInfo, handleFormSubmit)
+                  )}
+                </div>
+              )}
+              
               <div ref={messagesEndRef} />
               
               {/* フェーズ2への誘導 */}
