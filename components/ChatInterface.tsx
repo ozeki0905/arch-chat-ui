@@ -201,7 +201,7 @@ export default function ChatInterface() {
     }
   };
 
-  const requirementStatusBadge = (s: Requirement["status"]): JSX.Element => {
+  const requirementStatusBadge = (s: Requirement["status"]) => {
     const map: Record<Requirement["status"], { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
       missing: { variant: "destructive", label: "未" },
       partial: { variant: "secondary", label: "一部" },
@@ -211,7 +211,7 @@ export default function ChatInterface() {
     return <Badge variant={v.variant}>{v.label}</Badge>;
   };
 
-  const calcStepIcon = (s: CalcStep["status"]): JSX.Element => {
+  const calcStepIcon = (s: CalcStep["status"]) => {
     switch (s) {
       case "done":
         return <CheckCircle2 className="h-4 w-4" />;
@@ -226,7 +226,7 @@ export default function ChatInterface() {
 
   return (
     <TooltipProvider>
-      <div className="w-full h-screen grid grid-cols-1 xl:grid-cols-[1fr_420px] 2xl:grid-cols-[1fr_480px] overflow-hidden bg-background">
+      <div className="w-full h-screen grid grid-cols-1 lg:grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px] overflow-hidden bg-background">
         {/* 左：チャット領域 */}
         <div className="flex flex-col h-full">
           {/* ヘッダー */}
@@ -366,7 +366,7 @@ export default function ChatInterface() {
         </div>
 
         {/* 右：進捗/条件パネル */}
-        <div className="hidden xl:flex flex-col h-full border-l bg-muted/30 glass-dark">
+        <div className="hidden lg:flex flex-col h-full border-l bg-muted/30 glass-dark">
           <div className="px-4 py-4 border-b bg-card/50">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
@@ -490,7 +490,7 @@ export default function ChatInterface() {
 }
 
 // --- サブ：フェーズ入力フォーム ---
-function PhaseForm({ phase, onNext }: { phase: Phase; onNext: () => void }): JSX.Element {
+function PhaseForm({ phase, onNext }: { phase: Phase; onNext: () => void }) {
   return (
     <Card className="shadow-lg hover-lift animate-in">
       <CardHeader className="pb-2">
@@ -511,7 +511,7 @@ function PhaseForm({ phase, onNext }: { phase: Phase; onNext: () => void }): JSX
 function MobileProgressPanel({ phases, phaseProgress }: {
   phases: Phase[];
   phaseProgress: number;
-}): JSX.Element {
+}) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-4 border-b bg-card/50">
@@ -551,7 +551,7 @@ function MobileProgressPanel({ phases, phaseProgress }: {
 }
 
 // --- サブ：チャットバブル ---
-function ChatBubble({ role, content, files }: { role: Role; content: string; files?: UploadedFile[] }): JSX.Element {
+function ChatBubble({ role, content, files }: { role: Role; content: string; files?: UploadedFile[] }) {
   const isUser = role === "user";
   return (
     <div className={`flex items-start gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
