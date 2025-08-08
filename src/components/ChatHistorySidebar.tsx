@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
@@ -56,7 +56,16 @@ export function ChatHistorySidebar({
     p8: "サマリ"
   };
   
-  const groupSessionsByDate = (sessions: SessionSummary[]) => {
+  // クライアントサイドでのみ日付グループ化を行う
+  const [groupedSessions, setGroupedSessions] = useState<{ [key: string]: SessionSummary[] }>({
+    today: [],
+    yesterday: [],
+    thisWeek: [],
+    thisMonth: [],
+    older: []
+  });
+  
+  useEffect(() => {
     const now = Date.now();
     const today = new Date().setHours(0, 0, 0, 0);
     const yesterday = today - 86400000;
@@ -71,7 +80,7 @@ export function ChatHistorySidebar({
       older: []
     };
     
-    sessions.forEach(session => {
+    filteredSessions.forEach(session => {
       const sessionDate = new Date(session.createdAt).setHours(0, 0, 0, 0);
       if (sessionDate === today) {
         groups.today.push(session);
@@ -86,10 +95,8 @@ export function ChatHistorySidebar({
       }
     });
     
-    return groups;
-  };
-  
-  const groupedSessions = groupSessionsByDate(filteredSessions);
+    setGroupedSessions(groups);
+  }, [filteredSessions]);
   
   const SessionItem = ({ session }: { session: SessionSummary }) => {
     const isActive = session.id === currentSessionId;

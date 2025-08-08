@@ -134,6 +134,7 @@ export default function ChatInterface() {
   // セッション管理
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessionSummaries, setSessionSummaries] = useState<ReturnType<typeof loadSessionSummaries>>([]);
   
   // AIエージェント
   const [aiAgent] = useState(() => new AIAgent());
@@ -163,8 +164,12 @@ export default function ChatInterface() {
   
   // セッションの初期化と読み込み
   useEffect(() => {
+    // クライアントサイドでのみ実行
+    if (typeof window === "undefined") return;
+    
     const loadedSessions = loadSessions();
     setSessions(loadedSessions);
+    setSessionSummaries(loadSessionSummaries());
     
     // アクティブなセッションがあれば復元
     const activeSession = loadedSessions.find(s => s.isActive);
@@ -230,6 +235,7 @@ export default function ChatInterface() {
       
       setCurrentSession(updatedSession);
       saveSession(updatedSession);
+      setSessionSummaries(loadSessionSummaries());
     }
   }, [messages, files, projectInfo, currentPhaseLocal]);
 
@@ -503,6 +509,7 @@ export default function ChatInterface() {
                 phases.findIndex(ph => ph.key === session.phase) > phases.findIndex(ph => ph.key === p.key) ? "done" : "pending"
       })));
     }
+    setSessionSummaries(loadSessionSummaries());
   };
   
   const handleNewSession = (): void => {
@@ -535,11 +542,13 @@ export default function ChatInterface() {
     
     // セッション一覧を更新
     setSessions(prev => [newSession, ...prev.map(s => ({ ...s, isActive: false }))]);
+    setSessionSummaries(loadSessionSummaries());
   };
   
   const handleDeleteSession = (sessionId: string): void => {
     deleteSession(sessionId);
     setSessions(prev => prev.filter(s => s.id !== sessionId));
+    setSessionSummaries(loadSessionSummaries());
     
     // 削除したセッションが現在のセッションの場合は新規セッションを作成
     if (currentSession?.id === sessionId) {
@@ -630,7 +639,7 @@ export default function ChatInterface() {
         {/* 履歴サイドバー（デスクトップ） */}
         <div className="hidden lg:block border-r">
           <ChatHistorySidebar
-            sessions={loadSessionSummaries()}
+            sessions={sessionSummaries}
             currentSessionId={currentSession?.id || null}
             onSelectSession={handleSelectSession}
             onNewSession={handleNewSession}
@@ -645,7 +654,7 @@ export default function ChatInterface() {
               {/* モバイル履歴サイドバー */}
               <div className="lg:hidden">
                 <MobileChatHistorySidebar
-                  sessions={loadSessionSummaries()}
+                  sessions={sessionSummaries}
                   currentSessionId={currentSession?.id || null}
                   onSelectSession={handleSelectSession}
                   onNewSession={handleNewSession}
