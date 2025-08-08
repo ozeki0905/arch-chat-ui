@@ -14,8 +14,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Send, FileUp, Settings, Download, Loader2, CheckCircle2, AlertCircle,
-  ChevronRight, MessageSquare, Bot, User, Trash2, Play, Pause, RefreshCw
+  ChevronRight, MessageSquare, Bot, User, Trash2, Play, Pause, RefreshCw,
+  FileSearch
 } from "lucide-react";
+import { DocumentAnalysisDialog } from "@/components/DocumentAnalysisDialog";
+import { DocumentAnalysisResult, ExtractedItem } from "@/types/extraction";
+import { analyzeDocument } from "@/utils/documentParser";
 
 // --- 型定義（必要に応じて拡張） ---
 type Role = "user" | "assistant" | "system";
@@ -122,6 +126,11 @@ export default function ChatInterface() {
   const [calc, setCalc] = useState<CalcStep[]>(initialCalc);
   const [phases, setPhases] = useState<Phase[]>(initialPhases);
   const [isRunning, setIsRunning] = useState(false);
+  
+  // フェーズ1: ドキュメント解析関連の状態
+  const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = useState<DocumentAnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const phaseProgress = Math.round(
     (phases.filter((p) => p.status === "done").length / phases.length) * 100
@@ -167,11 +176,61 @@ export default function ChatInterface() {
       setRequirements((prev) => prev.map((r) => (r.key === "program" ? { ...r, status: "partial", note: "延床のみ取得" } : r)));
     }, 600);
   };
+  
+  // ドキュメント解析結果の確認
+  const handleAnalysisConfirm = (items: ExtractedItem[]): void => {
+    // 抽出された情報をRequirementに反映
+    const updatedRequirements = requirements.map(req => {
+      const extractedItem = items.find(item => 
+        (item.key === "siteAddress" && req.key === "site") ||
+        (item.key === "requiredFloorArea" && req.key === "program") ||
+        (item.key === "landUse" && req.key === "constraints")
+      );
+      
+      if (extractedItem && extractedItem.value) {
+        return {
+          ...req,
+          status: "complete" as const,
+          note: `抽出値: ${extractedItem.value}`
+        };
+      }
+      return req;
+    });
+    
+    setRequirements(updatedRequirements);
+    
+    // アシスタントメッセージを追加
+    const assistantMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: `ドキュメントから以下の情報を抽出しました:\n\n${items
+        .filter(item => item.value)
+        .map(item => `• ${item.label}: ${item.value}`)
+        .join("\n")}\n\n抽出された情報を確認し、不足している項目があれば追加入力してください。`,
+    };
+    setMessages(prev => [...prev, assistantMsg]);
+  };
 
-  const handleFiles = (fls: FileList | null): void => {
+  const handleFiles = async (fls: FileList | null): Promise<void> => {
     if (!fls) return;
     const next: UploadedFile[] = Array.from(fls).map((f) => ({ id: crypto.randomUUID(), name: f.name, size: f.size, type: f.type }));
     setFiles((prev) => [...prev, ...next]);
+    
+    // フェーズ1の場合、ドキュメント解析を実行
+    const currentPhase = phases.find(p => p.status === "current");
+    if (currentPhase?.key === "p1") {
+      setIsAnalyzing(true);
+      try {
+        // 最初のファイルを解析（実際には複数ファイル対応も可能）
+        const result = await analyzeDocument(Array.from(fls)[0]);
+        setCurrentAnalysis(result);
+        setShowAnalysisDialog(true);
+      } catch (error) {
+        console.error("Document analysis failed:", error);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }
   };
 
   const removeFile = (id: string) => setFiles((prev) => prev.filter((f) => f.id !== id));
@@ -306,15 +365,24 @@ export default function ChatInterface() {
                   </div>
                   <p className="text-lg font-medium mb-2">建築検討アシスタントへようこそ</p>
                   <p className="text-sm">図面をアップロードするか、プロジェクトの要件を入力してください</p>
+                  {currentPhase?.key === "p1" && (
+                    <div className="mt-6 p-4 bg-primary/10 rounded-lg max-w-md mx-auto">
+                      <FileSearch className="h-6 w-6 mx-auto mb-2 text-primary" />
+                      <p className="text-sm font-medium">フェーズ1: 対象の確認</p>
+                      <p className="text-xs mt-1">案件概要書やPDFをアップロードすると、自動で情報を抽出します</p>
+                    </div>
+                  )}
                 </div>
               )}
               {messages.map((msg) => (
                 <ChatBubble key={msg.id} role={msg.role} content={msg.content} files={msg.files} />
               ))}
-              {isLoading && (
+              {(isLoading || isAnalyzing) && (
                 <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">応答を生成中...</span>
+                  <span className="text-sm">
+                    {isAnalyzing ? "ドキュメントを解析中..." : "応答を生成中..."}
+                  </span>
                 </div>
               )}
             </div>
@@ -509,6 +577,14 @@ export default function ChatInterface() {
           </ScrollArea>
         </div>
       </div>
+      
+      {/* ドキュメント解析ダイアログ */}
+      <DocumentAnalysisDialog
+        open={showAnalysisDialog}
+        onOpenChange={setShowAnalysisDialog}
+        analysisResult={currentAnalysis}
+        onConfirm={handleAnalysisConfirm}
+      />
     </TooltipProvider>
   );
 }
