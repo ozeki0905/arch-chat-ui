@@ -649,7 +649,7 @@ export default function ChatInterface() {
           />
         </div>
         {/* 左：チャット領域 */}
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full min-h-0 overflow-hidden">
           {/* ヘッダー */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b glass animate-in">
             <div className="flex items-center gap-3">
@@ -732,7 +732,13 @@ export default function ChatInterface() {
           </div>
 
           {/* チャット表示エリア */}
-          <ScrollArea className="flex-1 p-4 sm:p-6">
+          {/* 
+            The ScrollArea wrapping the message list must be able to shrink
+            within its flex parent. Without `min-h-0` the default `min-height: min-content`
+            causes the element to stretch to accommodate its children and prevents
+            scrollbars from appearing when content overflows.
+          */}
+          <ScrollArea className="flex-1 min-h-0 p-4 sm:p-6">
             <div className="space-y-4 max-w-4xl mx-auto animate-slide-up">
               {messages.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
@@ -1045,7 +1051,7 @@ function MobileProgressPanel({ phases, phaseProgress }: {
           進捗・条件
         </h2>
       </div>
-      <ScrollArea className="flex-1 px-4 py-4">
+      <ScrollArea className="flex-1 min-h-0 px-4 py-4">
         <div className="space-y-4">
           <Card className="shadow-lg hover-lift animate-in">
             <CardHeader className="pb-2">
