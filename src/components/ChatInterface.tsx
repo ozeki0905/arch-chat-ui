@@ -237,7 +237,7 @@ export default function ChatInterface() {
     });
   };
 
-  const handleSend = (): void => {
+  const handleSend = async (): Promise<void> => {
     if (!input && files.length === 0) return;
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -248,20 +248,55 @@ export default function ChatInterface() {
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setFiles([]);
+    setIsLoading(true);
 
-    // 疑似レスポンス（後でAPI連携）
-    setTimeout(() => {
+    try {
+      // API呼び出し
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [...messages, userMsg].map(msg => ({
+            role: msg.role,
+            content: msg.content
+          })),
+          phase: currentPhaseLocal?.key,
+          projectInfo,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content:
-          "入力を受領しました。敷地と要求室の条件を確認し、用途地域・建ぺい/容積/斜線の一次判定を開始します。未入力の項目があれば、右の『情報回収状況』からご入力ください。",
+        content: data.message,
       };
       setMessages((prev) => [...prev, assistantMsg]);
-      // 進捗を少し進める
-      setCalc((prev) => prev.map((c) => (c.key === "mass" ? { ...c, status: "running", progress: 20 } : c)));
-      setRequirements((prev) => prev.map((r) => (r.key === "program" ? { ...r, status: "partial", note: "延床のみ取得" } : r)));
-    }, 600);
+      
+      // フェーズに応じた進捗更新
+      if (currentPhaseLocal?.key === "p1") {
+        setCalc((prev) => prev.map((c) => (c.key === "mass" ? { ...c, status: "running", progress: 20 } : c)));
+        setRequirements((prev) => prev.map((r) => (r.key === "program" ? { ...r, status: "partial", note: "延床のみ取得" } : r)));
+      }
+    } catch (error) {
+      console.error("Chat API error:", error);
+      // エラー時のフォールバック
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "申し訳ございません。一時的なエラーが発生しました。しばらくしてから再度お試しください。",
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // ドキュメント解析結果の確認
@@ -679,8 +714,8 @@ export default function ChatInterface() {
                 placeholder="建築要件やファイルをここに入力..."
                 className="flex-1 min-h-[40px] max-h-[120px] resize-none"
               />
-              <Button onClick={handleSend} disabled={!input && files.length === 0} className="gradient-primary text-white hover:opacity-90 transition-opacity hover-lift">
-                <Send className="h-4 w-4" />
+              <Button onClick={handleSend} disabled={(!input && files.length === 0) || isLoading} className="gradient-primary text-white hover:opacity-90 transition-opacity hover-lift">
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
           </div>
