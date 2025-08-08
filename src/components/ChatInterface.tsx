@@ -436,14 +436,14 @@ export default function ChatInterface() {
         </div>
 
         {/* 右：進捗・条件パネル（デスクトップ用） */}
-        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden lg:flex animate-in">
+        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden lg:flex animate-in h-full min-h-0">
           <div className="px-6 py-4 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
               進捗・条件
             </h2>
           </div>
-          <ScrollArea className="flex-1 px-6 py-4">
+          <ScrollArea className="flex-1 min-h-0 px-6 py-4">
             <div className="space-y-4">
             <Card className="shadow-lg hover-lift animate-in">
               <CardHeader className="pb-2">
