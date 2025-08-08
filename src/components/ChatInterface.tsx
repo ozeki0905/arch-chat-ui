@@ -189,6 +189,12 @@ export default function ChatInterface() {
     }
   }, []);
   
+  // 現在のフェーズを計算
+  const currentPhaseLocal = phases.find((p) => p.status === "current");
+  const phaseProgress = Math.round(
+    (phases.filter((p) => p.status === "done").length / phases.length) * 100
+  );
+  
   // セッションの保存
   useEffect(() => {
     if (currentSession) {
@@ -205,7 +211,7 @@ export default function ChatInterface() {
         files,
         projectInfo,
         updatedAt: Date.now(),
-        phase: currentPhase?.key
+        phase: currentPhaseLocal?.key
       };
       
       // タイトルの自動生成
@@ -216,12 +222,7 @@ export default function ChatInterface() {
       setCurrentSession(updatedSession);
       saveSession(updatedSession);
     }
-  }, [messages, files, projectInfo, currentPhase]);
-
-  const phaseProgress = Math.round(
-    (phases.filter((p) => p.status === "done").length / phases.length) * 100
-  );
-  const currentPhase = phases.find((p) => p.status === "current");
+  }, [messages, files, projectInfo, currentPhaseLocal]);
 
   const goNextPhase = (): void => {
     setPhases((prev) => {
@@ -302,7 +303,7 @@ export default function ChatInterface() {
     setMessages(prev => [...prev, assistantMsg]);
     
     // フェーズ1完了時、自動的にフェーズ2へ
-    if (currentPhase?.key === "p1") {
+    if (currentPhaseLocal?.key === "p1") {
       setTimeout(() => {
         goNextPhase();
         setShowPhase2Form(true);
@@ -340,8 +341,8 @@ export default function ChatInterface() {
     setFiles((prev) => [...prev, ...next]);
     
     // フェーズ1の場合、ドキュメント解析を実行
-    const currentPhase = phases.find(p => p.status === "current");
-    if (currentPhase?.key === "p1") {
+    const currentPhaseFile = phases.find(p => p.status === "current");
+    if (currentPhaseFile?.key === "p1") {
       setIsAnalyzing(true);
       try {
         // 最初のファイルを解析（実際には複数ファイル対応も可能）
@@ -583,7 +584,7 @@ export default function ChatInterface() {
                   </div>
                   <p className="text-lg font-medium mb-2">建築検討アシスタントへようこそ</p>
                   <p className="text-sm">図面をアップロードするか、プロジェクトの要件を入力してください</p>
-                  {currentPhase?.key === "p1" && (
+                  {currentPhaseLocal?.key === "p1" && (
                     <div className="mt-6 p-4 bg-primary/10 rounded-lg max-w-md mx-auto">
                       <FileSearch className="h-6 w-6 mx-auto mb-2 text-primary" />
                       <p className="text-sm font-medium">フェーズ1: 対象の確認</p>
@@ -594,7 +595,7 @@ export default function ChatInterface() {
               )}
               
               {/* フェーズ2フォームの表示 */}
-              {showPhase2Form && currentPhase?.key === "p2" && (
+              {showPhase2Form && currentPhaseLocal?.key === "p2" && (
                 <div className="max-w-3xl mx-auto">
                   <Phase2Form
                     projectInfo={projectInfo}
@@ -609,7 +610,7 @@ export default function ChatInterface() {
               <div ref={messagesEndRef} />
               
               {/* フェーズ2への誘導 */}
-              {currentPhase?.key === "p2" && !showPhase2Form && messages.length > 0 && (
+              {currentPhaseLocal?.key === "p2" && !showPhase2Form && messages.length > 0 && (
                 <div className="max-w-3xl mx-auto">
                   <Card className="shadow-lg hover-lift animate-in">
                     <CardContent className="py-6">
@@ -704,9 +705,9 @@ export default function ChatInterface() {
                   <Progress value={phaseProgress} className="h-3" />
                   <div className="text-sm font-bold w-12 text-right gradient-primary bg-clip-text text-transparent">{phaseProgress}%</div>
                 </div>
-                {currentPhase && (
+                {currentPhaseLocal && (
                   <div className="mt-2 text-xs text-muted-foreground">
-                    現在: <span className="font-medium text-foreground">{currentPhase.label}</span>
+                    現在: <span className="font-medium text-foreground">{currentPhaseLocal.label}</span>
                   </div>
                 )}
                 <div className="mt-3">
