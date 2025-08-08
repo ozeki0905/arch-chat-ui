@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,13 +15,16 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import {
   Send, FileUp, Settings, Download, Loader2, CheckCircle2, AlertCircle,
   ChevronRight, MessageSquare, Bot, User, Trash2, Play, Pause, RefreshCw,
-  FileSearch
+  FileSearch, History
 } from "lucide-react";
 import { DocumentAnalysisDialog } from "@/components/DocumentAnalysisDialog";
 import { DocumentAnalysisResult, ExtractedItem, ProjectInfo } from "@/types/extraction";
 import { analyzeDocument } from "@/utils/documentParser";
 import { Phase2Form } from "@/components/Phase2Form";
 import { DesignPolicy } from "@/types/designPolicy";
+import { ChatSession, ChatMessage as SessionChatMessage } from "@/types/chat";
+import { loadSessions, saveSession, generateSessionTitle, deleteSession, loadSessionSummaries } from "@/utils/sessionStorage";
+import { ChatHistorySidebar, MobileChatHistorySidebar } from "@/components/ChatHistorySidebar";
 
 // --- 型定義（必要に応じて拡張） ---
 type Role = "user" | "assistant" | "system";
@@ -122,6 +125,12 @@ export default function ChatInterface() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // セッション管理
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
 
   const [requirements, setRequirements] = useState<Requirement[]>(initialRequirements);
   const [design, setDesign] = useState<DesignCondition[]>(initialDesign);
@@ -137,6 +146,77 @@ export default function ChatInterface() {
   // フェーズ2: 設計方針関連の状態
   const [projectInfo, setProjectInfo] = useState<Partial<ProjectInfo>>({});
   const [showPhase2Form, setShowPhase2Form] = useState(false);
+  
+  // 自動スクロール
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+  
+  // セッションの初期化と読み込み
+  useEffect(() => {
+    const loadedSessions = loadSessions();
+    setSessions(loadedSessions);
+    
+    // アクティブなセッションがあれば復元
+    const activeSession = loadedSessions.find(s => s.isActive);
+    if (activeSession) {
+      setCurrentSession(activeSession);
+      setMessages(activeSession.messages.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        files: msg.files,
+        meta: msg.meta
+      })));
+      setFiles(activeSession.files || []);
+      if (activeSession.projectInfo) {
+        setProjectInfo(activeSession.projectInfo);
+      }
+    } else {
+      // 新規セッションを作成
+      const newSession: ChatSession = {
+        id: crypto.randomUUID(),
+        title: "新規チャット",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: [],
+        files: [],
+        phase: "p1",
+        isActive: true
+      };
+      setCurrentSession(newSession);
+      saveSession(newSession);
+    }
+  }, []);
+  
+  // セッションの保存
+  useEffect(() => {
+    if (currentSession) {
+      const updatedSession: ChatSession = {
+        ...currentSession,
+        messages: messages.map(msg => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          files: msg.files,
+          meta: msg.meta,
+          timestamp: Date.now()
+        })),
+        files,
+        projectInfo,
+        updatedAt: Date.now(),
+        phase: currentPhase?.key
+      };
+      
+      // タイトルの自動生成
+      if (messages.length === 1 && currentSession.title === "新規チャット") {
+        updatedSession.title = generateSessionTitle(messages[0].content, files);
+      }
+      
+      setCurrentSession(updatedSession);
+      saveSession(updatedSession);
+    }
+  }, [messages, files, projectInfo, currentPhase]);
 
   const phaseProgress = Math.round(
     (phases.filter((p) => p.status === "done").length / phases.length) * 100
@@ -321,15 +401,110 @@ export default function ChatInterface() {
         return <ChevronRight className="h-4 w-4" />;
     }
   };
+  
+  // セッション管理関数
+  const handleSelectSession = (sessionId: string): void => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return;
+    
+    // 現在のセッションを非アクティブに
+    if (currentSession) {
+      saveSession({ ...currentSession, isActive: false });
+    }
+    
+    // 新しいセッションをアクティブに
+    setCurrentSession({ ...session, isActive: true });
+    setMessages(session.messages.map(msg => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      files: msg.files,
+      meta: msg.meta
+    })));
+    setFiles(session.files || []);
+    if (session.projectInfo) {
+      setProjectInfo(session.projectInfo);
+    }
+    if (session.phase) {
+      // フェーズの復元
+      setPhases(prev => prev.map(p => ({
+        ...p,
+        status: p.key === session.phase ? "current" : 
+                phases.findIndex(ph => ph.key === session.phase) > phases.findIndex(ph => ph.key === p.key) ? "done" : "pending"
+      })));
+    }
+  };
+  
+  const handleNewSession = (): void => {
+    // 現在のセッションを非アクティブに
+    if (currentSession) {
+      saveSession({ ...currentSession, isActive: false });
+    }
+    
+    // 新規セッションを作成
+    const newSession: ChatSession = {
+      id: crypto.randomUUID(),
+      title: "新規チャット",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: [],
+      files: [],
+      phase: "p1",
+      isActive: true
+    };
+    
+    setCurrentSession(newSession);
+    setMessages([]);
+    setFiles([]);
+    setProjectInfo({});
+    setPhases(initialPhases);
+    setRequirements(initialRequirements);
+    setDesign(initialDesign);
+    setCalc(initialCalc);
+    saveSession(newSession);
+    
+    // セッション一覧を更新
+    setSessions(prev => [newSession, ...prev.map(s => ({ ...s, isActive: false }))]);
+  };
+  
+  const handleDeleteSession = (sessionId: string): void => {
+    deleteSession(sessionId);
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    
+    // 削除したセッションが現在のセッションの場合は新規セッションを作成
+    if (currentSession?.id === sessionId) {
+      handleNewSession();
+    }
+  };
 
   return (
     <TooltipProvider>
-      <div className="w-full h-screen grid grid-cols-1 lg:grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px] bg-background">
+      <div className="w-full h-screen grid grid-cols-1 lg:grid-cols-[320px_1fr] 2xl:grid-cols-[320px_1fr_480px] bg-background">
+        {/* 履歴サイドバー（デスクトップ） */}
+        <div className="hidden lg:block border-r">
+          <ChatHistorySidebar
+            sessions={loadSessionSummaries()}
+            currentSessionId={currentSession?.id || null}
+            onSelectSession={handleSelectSession}
+            onNewSession={handleNewSession}
+            onDeleteSession={handleDeleteSession}
+          />
+        </div>
         {/* 左：チャット領域 */}
         <div className="flex flex-col h-full overflow-hidden">
           {/* ヘッダー */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b glass animate-in">
             <div className="flex items-center gap-3">
+              {/* モバイル履歴サイドバー */}
+              <div className="lg:hidden">
+                <MobileChatHistorySidebar
+                  sessions={loadSessionSummaries()}
+                  currentSessionId={currentSession?.id || null}
+                  onSelectSession={handleSelectSession}
+                  onNewSession={handleNewSession}
+                  onDeleteSession={handleDeleteSession}
+                />
+              </div>
               <div className="p-2 rounded-xl gradient-primary shadow-glow">
                 <MessageSquare className="h-5 w-5 text-white" />
               </div>
@@ -340,7 +515,7 @@ export default function ChatInterface() {
               {/* モバイルでサイドパネルを開くボタン */}
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="xl:hidden">
+                  <Button variant="ghost" size="sm" className="2xl:hidden">
                     <ChevronRight className="h-4 w-4"/>
                   </Button>
                 </SheetTrigger>
@@ -431,6 +606,7 @@ export default function ChatInterface() {
               {messages.map((msg) => (
                 <ChatBubble key={msg.id} role={msg.role} content={msg.content} files={msg.files} />
               ))}
+              <div ref={messagesEndRef} />
               
               {/* フェーズ2への誘導 */}
               {currentPhase?.key === "p2" && !showPhase2Form && messages.length > 0 && (
@@ -510,7 +686,7 @@ export default function ChatInterface() {
         </div>
 
         {/* 右：進捗・条件パネル（デスクトップ用） */}
-        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden lg:flex animate-in h-full min-h-0">
+        <div className="border-l bg-card/50 backdrop-blur-sm flex-col hidden 2xl:flex animate-in h-full min-h-0">
           <div className="px-6 py-4 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
