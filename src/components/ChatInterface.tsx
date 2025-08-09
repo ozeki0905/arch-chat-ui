@@ -161,7 +161,7 @@ export default function ChatInterface() {
   // 自動スクロール
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]); // メッセージ数が変わった時のみスクロール
+  }, [messages.length, showPhase2Form, showForm]); // メッセージ数やフォーム表示が変わった時にスクロール
   
   // セッションの初期化と読み込み
   useEffect(() => {
@@ -758,21 +758,12 @@ export default function ChatInterface() {
                 </div>
               )}
               
-              {/* フェーズ2フォームの表示 */}
-              {showPhase2Form && currentPhaseLocal?.key === "p2" && (
-                <div className="max-w-4xl mx-auto">
-                  <TankFoundationWizard
-                    projectInfo={projectInfo}
-                    onComplete={handlePhase2Complete}
-                    onBack={() => setShowPhase2Form(false)}
-                  />
-                </div>
-              )}
+              {/* メッセージを時系列順に表示 */}
               {messages.map((msg) => (
                 <ChatBubble key={msg.id} role={msg.role} content={msg.content} files={msg.files} />
               ))}
               
-              {/* フォーム表示 */}
+              {/* フォーム表示 - メッセージの後に表示 */}
               {showForm && !isLoading && (
                 <div className="max-w-2xl mx-auto animate-slide-up">
                   {showForm === "site_info" && (
@@ -787,9 +778,18 @@ export default function ChatInterface() {
                 </div>
               )}
               
-              <div ref={messagesEndRef} />
+              {/* フェーズ2フォームの表示 - 最後に表示 */}
+              {showPhase2Form && currentPhaseLocal?.key === "p2" && (
+                <div className="max-w-4xl mx-auto">
+                  <TankFoundationWizard
+                    projectInfo={projectInfo}
+                    onComplete={handlePhase2Complete}
+                    onBack={() => setShowPhase2Form(false)}
+                  />
+                </div>
+              )}
               
-              {/* フェーズ2への誘導 */}
+              {/* フェーズ2への誘導 - フォームが表示されていない場合のみ */}
               {currentPhaseLocal?.key === "p2" && !showPhase2Form && messages.length > 0 && (
                 <div className="max-w-3xl mx-auto">
                   <Card className="shadow-lg hover-lift animate-in">
@@ -808,6 +808,8 @@ export default function ChatInterface() {
                   </Card>
                 </div>
               )}
+              
+              <div ref={messagesEndRef} />
               {(isLoading || isAnalyzing) && (
                 <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
                   <Loader2 className="h-4 w-4 animate-spin" />
