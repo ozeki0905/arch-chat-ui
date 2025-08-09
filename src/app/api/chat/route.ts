@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         { role: "system", content: systemPrompt },
         ...messages
       ],
-      temperature: 0.7,
+      temperature: 1,
       max_completion_tokens: 1000,
     });
 
