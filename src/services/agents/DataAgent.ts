@@ -2,6 +2,7 @@ import { ExtractedItem } from "@/types/extraction";
 import { ExtendedProjectInfo } from "@/types/projectData";
 import { TankFoundationDesignInput } from "@/types/tankFoundationDesign";
 import { ChatSession } from "@/types/chat";
+import { debugFetch, enableDebugFetch } from "@/utils/debugFetch";
 
 export interface DataAgentConfig {
   apiBaseUrl?: string;
@@ -19,6 +20,12 @@ export class DataAgent {
       enableCache: config.enableCache ?? true,
       cacheTimeout: config.cacheTimeout || 5 * 60 * 1000 // 5分
     };
+    
+    console.log("DataAgent initialized with config:", {
+      apiBaseUrl: this.config.apiBaseUrl,
+      enableCache: this.config.enableCache,
+      cacheTimeout: this.config.cacheTimeout
+    });
   }
 
   /**
@@ -110,19 +117,31 @@ export class DataAgent {
       console.log("DataAgent.createProject - Sending request to:", `${this.config.apiBaseUrl}/projects`);
       console.log("DataAgent.createProject - Request data:", JSON.stringify(fullDesignInput, null, 2));
 
-      const response = await fetch(`${this.config.apiBaseUrl}/projects`, {
+      const fetchFn = enableDebugFetch ? debugFetch : fetch;
+      const response = await fetchFn(`${this.config.apiBaseUrl}/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fullDesignInput)
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-        console.error("Failed to create project:", {
+        let errorData: any;
+        const contentType = response.headers.get("content-type");
+        
+        if (contentType && contentType.includes("application/json")) {
+          errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }));
+        } else {
+          const text = await response.text().catch(() => "Unknown error");
+          errorData = { error: text };
+        }
+        
+        console.error("Failed to create project - Full error details:", {
           status: response.status,
           statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
           errorData,
-          sentData: fullDesignInput
+          sentData: fullDesignInput,
+          url: `${this.config.apiBaseUrl}/projects`
         });
         
         // Provide user-friendly error messages
@@ -130,8 +149,12 @@ export class DataAgent {
           throw new Error("データベース接続エラー: データベースに接続できません。管理者にお問い合わせください。");
         } else if (response.status === 400) {
           throw new Error(`入力エラー: ${errorData.details || errorData.error || "必須項目が不足しています"}`);
+        } else if (response.status === 404) {
+          throw new Error(`APIエンドポイントが見つかりません: ${this.config.apiBaseUrl}/projects`);
+        } else if (response.status === 500) {
+          throw new Error(`サーバーエラー: ${errorData.details || errorData.error || "内部エラーが発生しました"}`);
         } else {
-          throw new Error(errorData.details || errorData.error || "プロジェクトの作成に失敗しました");
+          throw new Error(`${errorData.details || errorData.error || "プロジェクトの作成に失敗しました"} (Status: ${response.status})`);
         }
       }
 
