@@ -141,7 +141,7 @@ export default function ChatInterface() {
   
   // AIエージェント
   const [aiAgent] = useState(() => new AIAgent());
-  const [orchestrationService] = useState(() => new OrchestrationService(process.env.NEXT_PUBLIC_OPENAI_API_KEY));
+  const [orchestrationService] = useState(() => new OrchestrationService());
   const [showForm, setShowForm] = useState<AgentResponse["suggestedForm"] | null>(null);
   const [formData, setFormData] = useState<any>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
@@ -352,7 +352,9 @@ export default function ChatInterface() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Chat API error:", errorData);
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
@@ -366,10 +368,22 @@ export default function ChatInterface() {
       
     } catch (error) {
       console.error("Chat API error:", error);
+      let errorMessage = "申し訳ございません。一時的なエラーが発生しました。";
+      
+      if (error instanceof Error) {
+        if (error.message.includes("OpenAI API key is not configured")) {
+          errorMessage = "申し訳ございません。OpenAI APIキーが設定されていません。環境変数 OPENAI_API_KEY を設定してください。";
+        } else if (error.message.includes("API key")) {
+          errorMessage = "申し訳ございません。APIキーに問題があります。環境変数を確認してください。";
+        } else if (error.message.includes("model")) {
+          errorMessage = "申し訳ございません。AIモデルの設定に問題があります。";
+        }
+      }
+      
       const errorAssistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: "申し訳ございません。一時的なエラーが発生しました。しばらくしてから再度お試しください。",
+        content: errorMessage + " しばらくしてから再度お試しください。",
       };
       setMessages((prev) => [...prev, errorAssistantMsg]);
     } finally {

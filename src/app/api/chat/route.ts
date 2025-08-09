@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: NextRequest) {
+  // Check if API key is configured
+  if (!process.env.OPENAI_API_KEY) {
+    console.error("OPENAI_API_KEY is not configured");
+    return NextResponse.json(
+      { error: "OpenAI API key is not configured. Please set OPENAI_API_KEY in your environment variables." },
+      { status: 500 }
+    );
+  }
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
   try {
     const body = await request.json();
     const { messages, phase, projectInfo } = body;
@@ -34,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-2025-08-07",
+      model: "gpt-4",
       messages: [
         { role: "system", content: systemPrompt },
         ...messages
