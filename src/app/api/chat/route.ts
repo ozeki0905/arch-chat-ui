@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         ...messages
       ],
       temperature: 0.7,
-      max_tokens: 1000,
+      max_completion_tokens: 1000,
     });
 
     const responseMessage = completion.choices[0].message;
