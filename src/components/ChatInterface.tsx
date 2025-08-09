@@ -371,12 +371,20 @@ export default function ChatInterface() {
       let errorMessage = "申し訳ございません。一時的なエラーが発生しました。";
       
       if (error instanceof Error) {
+        // Show the actual error message from the backend
+        errorMessage = error.message;
+        
+        // Add additional context for common errors
         if (error.message.includes("OpenAI API key is not configured")) {
-          errorMessage = "申し訳ございません。OpenAI APIキーが設定されていません。環境変数 OPENAI_API_KEY を設定してください。";
+          errorMessage = "OpenAI APIキーが設定されていません。環境変数 OPENAI_API_KEY を設定してください。";
         } else if (error.message.includes("API key")) {
-          errorMessage = "申し訳ございません。APIキーに問題があります。環境変数を確認してください。";
+          errorMessage = "APIキーに問題があります。環境変数を確認してください。";
         } else if (error.message.includes("model")) {
-          errorMessage = "申し訳ございません。AIモデルの設定に問題があります。";
+          errorMessage = "AIモデルの設定に問題があります。";
+        } else if (error.message.includes("データベース接続エラー")) {
+          errorMessage += "\n\nPostgreSQLが起動していることを確認し、.env.localの設定を確認してください。";
+        } else if (error.message.includes("Failed to create project")) {
+          errorMessage = "プロジェクトの作成に失敗しました。データベース接続を確認してください。";
         }
       }
       

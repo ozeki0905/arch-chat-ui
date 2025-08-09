@@ -55,6 +55,9 @@ export class DataAgent {
     try {
       // ExtractedItemsとProjectInfoからTankFoundationDesignInputを構築
       const fullDesignInput = this.buildDesignInput(extractedItems, projectInfo, designInput);
+      
+      console.log("DataAgent.createProject - Sending request to:", `${this.config.apiBaseUrl}/projects`);
+      console.log("DataAgent.createProject - Request data:", JSON.stringify(fullDesignInput, null, 2));
 
       const response = await fetch(`${this.config.apiBaseUrl}/projects`, {
         method: "POST",
