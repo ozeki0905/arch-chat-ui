@@ -30,7 +30,30 @@ export class DataAgent {
     projectInfo: Partial<ExtendedProjectInfo>,
     designInput?: Partial<TankFoundationDesignInput>
   ): Promise<{ projectId: string; success: boolean }> {
+    console.log("DataAgent.saveProjectData - Called with:", {
+      projectId,
+      hasExtractedItems: !!extractedItems,
+      extractedItemsCount: extractedItems?.length || 0,
+      extractedItems: extractedItems?.map(item => ({ 
+        key: item.key, 
+        value: item.value, 
+        category: item.category,
+        status: item.status 
+      })),
+      projectInfo,
+      hasDesignInput: !!designInput
+    });
+
     try {
+      // Validate inputs
+      if (!extractedItems || extractedItems.length === 0) {
+        console.warn("DataAgent.saveProjectData - No extracted items provided");
+      }
+      
+      if (!projectInfo || Object.keys(projectInfo).length === 0) {
+        console.warn("DataAgent.saveProjectData - No project info provided");
+      }
+
       // 既存プロジェクトの更新か新規作成かを判定
       if (projectId) {
         return await this.updateProject(projectId, extractedItems, projectInfo, designInput);
@@ -53,8 +76,36 @@ export class DataAgent {
     designInput?: Partial<TankFoundationDesignInput>
   ): Promise<{ projectId: string; success: boolean }> {
     try {
+      console.log("DataAgent.createProject - Input validation:", {
+        hasExtractedItems: !!extractedItems,
+        extractedItemsCount: extractedItems?.length || 0,
+        hasProjectInfo: !!projectInfo,
+        projectInfo,
+        hasDesignInput: !!designInput
+      });
+
+      // Validate inputs
+      if (!extractedItems && !projectInfo && !designInput) {
+        throw new Error("No data provided to create project");
+      }
+
       // ExtractedItemsとProjectInfoからTankFoundationDesignInputを構築
-      const fullDesignInput = this.buildDesignInput(extractedItems, projectInfo, designInput);
+      const fullDesignInput = this.buildDesignInput(extractedItems || [], projectInfo || {}, designInput);
+      
+      // Validate required fields
+      if (!fullDesignInput.project?.name) {
+        console.error("DataAgent.createProject - Missing project name", {
+          fullDesignInput,
+          projectInfo,
+          extractedItems
+        });
+        throw new Error("プロジェクト名が設定されていません");
+      }
+
+      if (!fullDesignInput.project?.created_by) {
+        console.error("DataAgent.createProject - Missing created_by", fullDesignInput);
+        throw new Error("作成者情報が設定されていません");
+      }
       
       console.log("DataAgent.createProject - Sending request to:", `${this.config.apiBaseUrl}/projects`);
       console.log("DataAgent.createProject - Request data:", JSON.stringify(fullDesignInput, null, 2));
@@ -108,22 +159,49 @@ export class DataAgent {
     projectInfo: Partial<ExtendedProjectInfo>,
     designInput?: Partial<TankFoundationDesignInput>
   ): Promise<{ projectId: string; success: boolean }> {
-    const updates = this.buildDesignInput(extractedItems, projectInfo, designInput);
+    try {
+      console.log("DataAgent.updateProject - Input:", {
+        projectId,
+        hasExtractedItems: !!extractedItems,
+        extractedItemsCount: extractedItems?.length || 0,
+        hasProjectInfo: !!projectInfo,
+        hasDesignInput: !!designInput
+      });
 
-    const response = await fetch(`${this.config.apiBaseUrl}/projects/${projectId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates)
-    });
+      const updates = this.buildDesignInput(extractedItems || [], projectInfo || {}, designInput);
 
-    if (!response.ok) {
-      throw new Error("Failed to update project");
+      // Ensure we have valid update data
+      if (!updates || Object.keys(updates).length === 0) {
+        console.warn("DataAgent.updateProject - No updates to apply");
+        return { projectId, success: true };
+      }
+
+      console.log("DataAgent.updateProject - Sending update:", JSON.stringify(updates, null, 2));
+
+      const response = await fetch(`${this.config.apiBaseUrl}/projects/${projectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Failed to update project:", {
+          status: response.status,
+          errorData,
+          sentData: updates
+        });
+        throw new Error(errorData.error || "Failed to update project");
+      }
+
+      // キャッシュをクリア
+      this.clearCache(projectId);
+      
+      return { projectId, success: true };
+    } catch (error) {
+      console.error("Error in updateProject:", error);
+      throw error;
     }
-
-    // キャッシュをクリア
-    this.clearCache(projectId);
-    
-    return { projectId, success: true };
   }
 
   /**
@@ -264,44 +342,59 @@ export class DataAgent {
     projectInfo: Partial<ExtendedProjectInfo>,
     existingInput?: Partial<TankFoundationDesignInput>
   ): Partial<TankFoundationDesignInput> {
+    console.log("DataAgent.buildDesignInput - Input params:", {
+      extractedItemsCount: extractedItems?.length || 0,
+      projectInfo,
+      existingInput,
+      extractedItems: extractedItems?.map(item => ({ key: item.key, value: item.value, status: item.status }))
+    });
+
     const input: Partial<TankFoundationDesignInput> = existingInput || {};
 
     // ProjectInfoから基本情報を設定
     // プロジェクト情報は必須なので、デフォルト値を設定
+    const projectName = projectInfo?.projectName || input.project?.name || "新規プロジェクト";
+    const createdBy = input.project?.created_by || "system";
+    
     input.project = {
       project_id: input.project?.project_id || `TF-${Date.now()}`,
-      name: projectInfo.projectName || input.project?.name || "新規プロジェクト",
-      created_by: input.project?.created_by || "system",
+      name: projectName,
+      created_by: createdBy,
       ...input.project
     };
 
+    console.log("DataAgent.buildDesignInput - Created project object:", input.project);
+
     // サイト情報もデフォルト値を設定
     input.site = {
-      site_name: projectInfo.siteName || input.site?.site_name || "未設定",
-      location: projectInfo.siteAddress || input.site?.location || "未設定",
+      site_name: projectInfo?.siteName || input.site?.site_name || "未設定",
+      location: projectInfo?.siteAddress || input.site?.location || "未設定",
       ...input.site
     };
 
     // ExtractedItemsから詳細情報を設定
-    extractedItems.forEach(item => {
-      if (item.status !== "extracted" && item.status !== "confirmed") return;
+    if (extractedItems && Array.isArray(extractedItems)) {
+      extractedItems.forEach(item => {
+        if (item.status !== "extracted" && item.status !== "confirmed") return;
 
-      switch (item.category) {
-        case "tank":
-          this.updateTankInfo(input, item);
-          break;
-        case "site":
-          this.updateSiteInfo(input, item);
-          break;
-        case "regulation":
-          this.updateRegulationInfo(input, item);
-          break;
-        case "building":
-          this.updateBuildingInfo(input, item);
-          break;
-      }
-    });
+        switch (item.category) {
+          case "tank":
+            this.updateTankInfo(input, item);
+            break;
+          case "site":
+            this.updateSiteInfo(input, item);
+            break;
+          case "regulation":
+            this.updateRegulationInfo(input, item);
+            break;
+          case "building":
+            this.updateBuildingInfo(input, item);
+            break;
+        }
+      });
+    }
 
+    console.log("DataAgent.buildDesignInput - Final output:", JSON.stringify(input, null, 2));
     return input;
   }
 

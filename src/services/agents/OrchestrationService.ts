@@ -67,6 +67,12 @@ export class OrchestrationService {
 
       // 3. Data Agent: 必要に応じてデータを保存
       if (this.shouldSaveData(dialogResult, extractedItems)) {
+        console.log("OrchestrationService.processUserInput - Saving data:", {
+          projectId,
+          extractedItemsCount: dialogResult.extractedItems?.length || 0,
+          projectInfo: dialogResult.projectInfo
+        });
+
         const saveResult = await this.dataAgent.saveProjectData(
           projectId || null,
           dialogResult.extractedItems,
@@ -204,6 +210,12 @@ export class OrchestrationService {
     );
 
     // データを保存
+    console.log("OrchestrationService.processFormSubmission - Saving data:", {
+      projectId,
+      mergedItemsCount: mergedItems?.length || 0,
+      updatedProjectInfo
+    });
+
     const saveResult = await this.dataAgent.saveProjectData(
       projectId || null,
       mergedItems,

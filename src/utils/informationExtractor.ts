@@ -2,6 +2,22 @@ import { InfoCategory, ExtractedItem } from "@/types/extraction";
 
 // キーワード辞書
 const KEYWORD_PATTERNS: Record<string, { keywords: string[]; patterns: RegExp[]; category: InfoCategory }> = {
+  projectName: {
+    keywords: ["プロジェクト名", "案件名", "工事名", "計画名", "プロジェクト"],
+    patterns: [
+      /(?:プロジェクト名|案件名|工事名|計画名)[：:]\s*(.+?)(?:\n|$)/,
+      /「(.+?)」(?:プロジェクト|計画|工事)/,
+      /(.+?)(?:プロジェクト|計画|工事)(?:\s|$)/
+    ],
+    category: "siteInfo"
+  },
+  siteName: {
+    keywords: ["敷地名称", "施設名", "建物名"],
+    patterns: [
+      /(?:敷地名称|施設名|建物名)[：:]\s*(.+?)(?:\n|$)/,
+    ],
+    category: "siteInfo"
+  },
   siteAddress: {
     keywords: ["住所", "所在地", "建設地", "敷地"],
     patterns: [
@@ -42,7 +58,15 @@ const KEYWORD_PATTERNS: Record<string, { keywords: string[]; patterns: RegExp[];
     ],
     category: "regulations"
   },
-  requiredFloorArea: {
+  buildingUse: {
+    keywords: ["建物用途", "用途", "施設用途", "建築用途"],
+    patterns: [
+      /(?:建物|施設|建築)?用途[：:]\s*(.+?)(?:\n|$)/,
+      /(?:事務所|店舗|工場|倉庫|住宅|ホテル|病院|学校)(?:ビル|建築|建物)?/
+    ],
+    category: "program"
+  },
+  totalFloorArea: {
     keywords: ["延床面積", "延べ床面積", "総床面積", "建築面積"],
     patterns: [
       /(?:延べ?床|総床|建築)面積[：:]\s*([\d,]+\.?\d*)\s*(?:㎡|m2|平米)/,
@@ -82,7 +106,31 @@ const KEYWORD_PATTERNS: Record<string, { keywords: string[]; patterns: RegExp[];
       /(?:タンク)?容量[：:]\s*([\d,]+)\s*(?:kL|キロリットル)/,
       /(\d+)\s*kL(?:タンク|型)/,
     ],
-    category: "program"
+    category: "tank"
+  },
+  tankContent: {
+    keywords: ["内容物", "貯蔵物", "危険物", "油種"],
+    patterns: [
+      /(?:内容物|貯蔵物)[：:]\s*(.+?)(?:\n|$)/,
+      /(?:ガソリン|軽油|重油|灯油|原油|アルコール|化学薬品)/
+    ],
+    category: "tank"
+  },
+  tankDiameter: {
+    keywords: ["タンク直径", "直径", "内径"],
+    patterns: [
+      /(?:タンク)?直径[：:]\s*([\d,]+\.?\d*)\s*(?:m|メートル)/,
+      /内径[：:]\s*([\d,]+\.?\d*)\s*(?:m|メートル)/,
+    ],
+    category: "tank"
+  },
+  tankHeight: {
+    keywords: ["タンク高さ", "高さ", "タンク高"],
+    patterns: [
+      /(?:タンク)?高さ[：:]\s*([\d,]+\.?\d*)\s*(?:m|メートル)/,
+      /タンク高[：:]\s*([\d,]+\.?\d*)\s*(?:m|メートル)/,
+    ],
+    category: "tank"
   },
 };
 
