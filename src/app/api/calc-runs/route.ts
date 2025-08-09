@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withTransaction, query } from "@/lib/db";
+import { withTransaction, query, mockDb, isUsingMockDb } from "@/lib/db-wrapper";
 import { TankFoundationDesignInput } from "@/types/tankFoundationDesign";
 
 // POST /api/calc-runs - Create a new calculation run
@@ -9,6 +9,18 @@ export async function POST(request: NextRequest) {
       projectId: string; 
       designInput: TankFoundationDesignInput 
     } = await request.json();
+
+    // Use mock database if configured
+    if (isUsingMockDb()) {
+      const result = await mockDb.createCalcRun(projectId, designInput);
+      return NextResponse.json({
+        success: true,
+        runId: result.runId,
+        calcRunId: result.runId,
+        status: 'queued',
+        message: "Calculation run created and queued (using mock database)",
+      });
+    }
 
     const runData = await withTransaction(async (client) => {
       // Generate unique run ID

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, withTransaction } from "@/lib/db";
+import { query, withTransaction, mockDb, isUsingMockDb } from "@/lib/db-wrapper";
 
 // GET /api/projects/[id] - Get project details
 export async function GET(
@@ -8,6 +8,18 @@ export async function GET(
 ) {
   try {
     const projectId = params.id;
+
+    // Use mock database if configured
+    if (isUsingMockDb()) {
+      const project = await mockDb.getProject(projectId);
+      if (!project) {
+        return NextResponse.json(
+          { error: "Project not found" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json(project);
+    }
 
     // Fetch project with all related data
     const projectResult = await query(
@@ -72,6 +84,16 @@ export async function PUT(
   try {
     const projectId = params.id;
     const updates = await request.json();
+
+    // Use mock database if configured
+    if (isUsingMockDb()) {
+      await mockDb.updateProject(projectId, updates);
+      return NextResponse.json({
+        success: true,
+        projectId,
+        message: "Project updated successfully (using mock database)",
+      });
+    }
 
     await withTransaction(async (client) => {
       // Update project name if provided

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withTransaction, query } from "@/lib/db";
+import { withTransaction, query, mockDb, isUsingMockDb } from "@/lib/db-wrapper";
 import { TankFoundationDesignInput } from "@/types/tankFoundationDesign";
 
 // GET /api/projects - List all projects
@@ -8,6 +8,12 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
+
+    // Use mock database if configured
+    if (isUsingMockDb()) {
+      const result = await mockDb.listProjects(limit, offset);
+      return NextResponse.json(result);
+    }
 
     const result = await query(
       `SELECT 
@@ -67,6 +73,28 @@ export async function POST(request: NextRequest) {
     // Ensure created_by has a default value
     if (!designInput.project.created_by) {
       designInput.project.created_by = 'system';
+    }
+
+    // Use mock database if configured
+    if (isUsingMockDb()) {
+      try {
+        const result = await mockDb.createProject(designInput);
+        return NextResponse.json({
+          success: true,
+          projectId: result.projectId,
+          projectName: result.projectName,
+          message: "Project created successfully (using mock database)",
+        });
+      } catch (error) {
+        console.error("Failed to create project in mock database:", error);
+        return NextResponse.json(
+          { 
+            error: "Failed to create project", 
+            details: error instanceof Error ? error.message : "Unknown error"
+          },
+          { status: 500 }
+        );
+      }
     }
 
     const projectData = await withTransaction(async (client) => {

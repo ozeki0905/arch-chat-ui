@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, withTransaction } from "@/lib/db";
+import { query, withTransaction, mockDb, isUsingMockDb } from "@/lib/db-wrapper";
 import { ChatSession } from "@/types/chat";
 
 // GET /api/sessions - List chat sessions
@@ -9,6 +9,15 @@ export async function GET(request: NextRequest) {
     const projectId = searchParams.get("projectId");
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
+
+    // Use mock database if configured
+    if (isUsingMockDb()) {
+      const sessions = await mockDb.getSessions(projectId || undefined);
+      return NextResponse.json({
+        sessions: sessions.slice(offset, offset + limit),
+        total: sessions.length,
+      });
+    }
 
     let whereClause = '';
     let params = [];
@@ -60,6 +69,15 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session: ChatSession = await request.json();
+
+    // Use mock database if configured
+    if (isUsingMockDb()) {
+      const success = await mockDb.saveSession(session);
+      return NextResponse.json({
+        success,
+        session,
+      });
+    }
 
     const savedSession = await withTransaction(async (client) => {
       // Check if session exists

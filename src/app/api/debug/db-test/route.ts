@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
-import pool, { query } from "@/lib/db";
+import { pool, query, mockDb, isUsingMockDb } from "@/lib/db-wrapper";
 
 // GET /api/debug/db-test - Test database connection and table existence
 export async function GET() {
+  // Use mock database if configured
+  if (isUsingMockDb()) {
+    const mockResults = await mockDb.testConnection();
+    return NextResponse.json(mockResults, { status: 200 });
+  }
+
   const results: any = {
     connection: false,
     tables: {},

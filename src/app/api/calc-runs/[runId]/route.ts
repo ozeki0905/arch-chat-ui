@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, withTransaction } from "@/lib/db";
+import { query, withTransaction, mockDb, isUsingMockDb } from "@/lib/db-wrapper";
 import { CalcResult, RunStatusResponse } from "@/types/tankFoundationDesign";
 
 // GET /api/calc-runs/[runId] - Get calculation run status and results
@@ -9,6 +9,25 @@ export async function GET(
 ) {
   try {
     const runId = params.runId;
+
+    // Use mock database if configured
+    if (isUsingMockDb()) {
+      const run = await mockDb.getCalcRun(runId);
+      if (!run) {
+        return NextResponse.json(
+          { error: "Calculation run not found" },
+          { status: 404 }
+        );
+      }
+      
+      const response: RunStatusResponse = {
+        status: run.status,
+        result: run.result || null,
+        llm: null,
+      };
+      
+      return NextResponse.json(response);
+    }
 
     // Fetch run details
     const runResult = await query(
