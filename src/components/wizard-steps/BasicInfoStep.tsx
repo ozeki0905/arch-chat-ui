@@ -10,13 +10,13 @@ import {
   TankFoundationDesignInput,
   ValidationResponse
 } from "@/types/tankFoundationDesign";
-import { ProjectInfo } from "@/types/extraction";
+import { ExtendedProjectInfo } from "@/types/projectData";
 
 interface BasicInfoStepProps {
   data: Partial<TankFoundationDesignInput>;
   onUpdate: (data: Partial<TankFoundationDesignInput>) => void;
   validation?: ValidationResponse;
-  projectInfo: Partial<ProjectInfo>;
+  projectInfo: Partial<ExtendedProjectInfo>;
 }
 
 export function BasicInfoStep({ 

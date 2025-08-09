@@ -18,7 +18,8 @@ import {
   FileSearch, History
 } from "lucide-react";
 import { DocumentAnalysisDialog } from "@/components/DocumentAnalysisDialog";
-import { DocumentAnalysisResult, ExtractedItem, ProjectInfo } from "@/types/extraction";
+import { DocumentAnalysisResult, ExtractedItem } from "@/types/extraction";
+import { ExtendedProjectInfo } from "@/types/projectData";
 import { analyzeDocument } from "@/utils/documentParser";
 import { TankFoundationWizard } from "@/components/TankFoundationWizard";
 import { DesignPolicy } from "@/types/designPolicy";
@@ -29,6 +30,7 @@ import { ChatHistorySidebar, MobileChatHistorySidebar } from "@/components/ChatH
 import { AIAgent, AgentResponse } from "@/services/aiAgent";
 import { SiteInfoForm, BuildingOverviewForm, generateDynamicForm } from "@/components/FormInput";
 import { extractInformation, mergeExtractedItems } from "@/utils/informationExtractor";
+import { OrchestrationService } from "@/services/agents";
 
 // --- 型定義（必要に応じて拡張） ---
 type Role = "user" | "assistant" | "system";
@@ -139,8 +141,10 @@ export default function ChatInterface() {
   
   // AIエージェント
   const [aiAgent] = useState(() => new AIAgent());
+  const [orchestrationService] = useState(() => new OrchestrationService(process.env.NEXT_PUBLIC_OPENAI_API_KEY));
   const [showForm, setShowForm] = useState<AgentResponse["suggestedForm"] | null>(null);
   const [formData, setFormData] = useState<any>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
 
   const [requirements, setRequirements] = useState<Requirement[]>(initialRequirements);
   const [design, setDesign] = useState<DesignCondition[]>(initialDesign);
@@ -155,7 +159,7 @@ export default function ChatInterface() {
   const [extractedItems, setExtractedItems] = useState<ExtractedItem[]>([]);
   
   // フェーズ2: 設計方針関連の状態
-  const [projectInfo, setProjectInfo] = useState<Partial<ProjectInfo>>({});
+  const [projectInfo, setProjectInfo] = useState<Partial<ExtendedProjectInfo>>({});
   const [showPhase2Form, setShowPhase2Form] = useState(false);
   
   // 自動スクロール
@@ -273,11 +277,17 @@ export default function ChatInterface() {
     setShowForm(null);
 
     try {
-      // AIエージェントで処理
-      const agentResponse = await aiAgent.processTextInput(input);
+      // Orchestration Serviceで処理
+      const orchestrationResult = await orchestrationService.processUserInput(
+        input,
+        currentPhaseLocal?.key || "p1",
+        extractedItems,
+        projectInfo,
+        currentProjectId || currentSession?.projectId
+      );
       
       // アクションを処理
-      for (const action of agentResponse.actions) {
+      for (const action of orchestrationResult.actions) {
         switch (action.type) {
           case "update_status":
             if (action.payload.extractedItems) {
@@ -287,6 +297,18 @@ export default function ChatInterface() {
             if (action.payload.projectInfo) {
               setProjectInfo(action.payload.projectInfo);
             }
+            if (action.payload.projectId) {
+              setCurrentProjectId(action.payload.projectId);
+            }
+            if (action.payload.progressStatus) {
+              // 進捗状況を更新
+              const progress = action.payload.progressStatus;
+              setRequirements(prev => prev.map(req => ({
+                ...req,
+                status: progress.completedFields.includes(req.key) ? "complete" : 
+                        progress.missingFields.includes(req.key) ? "missing" : "partial"
+              })));
+            }
             break;
           case "proceed_phase":
             if (action.payload.nextPhase === "p2") {
@@ -294,14 +316,24 @@ export default function ChatInterface() {
               setShowPhase2Form(true);
             }
             break;
+          case "show_form":
+            setShowForm(action.payload.phase === "p1" ? "dynamic" : null);
+            setFormData(action.payload.defaults);
+            break;
+          case "show_message":
+            // エラーメッセージなどを表示
+            console.error(action.payload.message);
+            break;
         }
       }
       
-      // フォーム表示の判断
-      if (agentResponse.suggestedForm) {
-        setShowForm(agentResponse.suggestedForm);
-        setFormData(agentResponse.formData);
-      }
+      // アシスタントの応答を追加
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: orchestrationResult.responseMessage,
+      };
+      setMessages(prev => [...prev, assistantMsg]);
       
       // API呼び出しも並行して実行（既存の機能を維持）
       const response = await fetch("/api/chat", {
@@ -593,10 +625,18 @@ export default function ChatInterface() {
     setIsLoading(true);
     
     try {
-      const agentResponse = await aiAgent.processFormInput(data);
+      // Orchestration Serviceでフォーム送信を処理
+      const orchestrationResult = await orchestrationService.processFormSubmission(
+        data,
+        showForm || "unknown",
+        currentPhaseLocal?.key || "p1",
+        extractedItems,
+        projectInfo,
+        currentProjectId || currentSession?.projectId
+      );
       
       // アクションを処理
-      for (const action of agentResponse.actions) {
+      for (const action of orchestrationResult.actions) {
         switch (action.type) {
           case "update_status":
             if (action.payload.extractedItems) {
@@ -605,6 +645,9 @@ export default function ChatInterface() {
             }
             if (action.payload.projectInfo) {
               setProjectInfo(action.payload.projectInfo);
+            }
+            if (action.payload.projectId) {
+              setCurrentProjectId(action.payload.projectId);
             }
             break;
           case "proceed_phase":
@@ -620,14 +663,9 @@ export default function ChatInterface() {
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: agentResponse.message,
+        content: orchestrationResult.responseMessage,
       };
       setMessages(prev => [...prev, assistantMsg]);
-      
-      // 新たなフォームが必要な場合
-      if (agentResponse.suggestedForm) {
-        setShowForm(agentResponse.suggestedForm);
-        setFormData(agentResponse.formData);
       }
     } catch (error) {
       console.error("Form processing error:", error);

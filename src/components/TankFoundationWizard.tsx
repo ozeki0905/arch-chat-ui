@@ -20,7 +20,7 @@ import {
   Phase2WizardState,
   ValidationResponse
 } from "@/types/tankFoundationDesign";
-import { ProjectInfo } from "@/types/extraction";
+import { ExtendedProjectInfo } from "@/types/projectData";
 
 // Import wizard step components
 import { BasicInfoStep } from "./wizard-steps/BasicInfoStep";
@@ -32,7 +32,7 @@ import { PileCatalogStep } from "./wizard-steps/PileCatalogStep";
 import { ReviewStep } from "./wizard-steps/ReviewStep";
 
 interface TankFoundationWizardProps {
-  projectInfo: Partial<ProjectInfo>;
+  projectInfo: Partial<ExtendedProjectInfo>;
   onComplete: (designData: TankFoundationDesignInput) => void;
   onBack?: () => void;
 }
@@ -80,11 +80,11 @@ export function TankFoundationWizard({
   onComplete, 
   onBack 
 }: TankFoundationWizardProps) {
-  const [wizardState, setWizardState] = useState<Phase2WizardState>({
-    currentStep: "basic_info",
-    data: {
+  // プロジェクト情報から初期データを構築
+  const buildInitialData = (): Partial<TankFoundationDesignInput> => {
+    const data: Partial<TankFoundationDesignInput> = {
       project: {
-        project_id: `TF-${Date.now()}`,
+        project_id: projectInfo.projectId || `TF-${Date.now()}`,
         name: projectInfo.projectName || "新規タンク基礎設計",
         created_at: new Date().toISOString()
       },
@@ -96,7 +96,33 @@ export function TankFoundationWizard({
         show_all_assumptions: true,
         language: "ja"
       }
-    },
+    };
+
+    // タンク情報が既にある場合は設定
+    if (projectInfo.tankCapacity || projectInfo.tankDiameter) {
+      data.tank = {
+        capacity_kl: projectInfo.tankCapacity || 0,
+        content_type: projectInfo.tankContent || "",
+        diameter_m: projectInfo.tankDiameter,
+        height_m: projectInfo.tankHeight,
+        shape: "cylindrical"
+      };
+    }
+
+    // 規制情報
+    if (projectInfo.legalClassification) {
+      data.regulations = {
+        legal_classification: projectInfo.legalClassification,
+        applied_codes: projectInfo.appliedCodes || []
+      };
+    }
+
+    return data;
+  };
+
+  const [wizardState, setWizardState] = useState<Phase2WizardState>({
+    currentStep: "basic_info",
+    data: buildInitialData(),
     validation: {} as Record<Phase2WizardStep, ValidationResponse>,
     isValidating: false,
     isCalculating: false
