@@ -160,6 +160,14 @@ export class DataAgent {
 
       const result = await response.json();
       
+      console.log("DataAgent.createProject - Success response:", result);
+      
+      // Validate response
+      if (!result.projectId) {
+        console.error("DataAgent.createProject - Invalid response, missing projectId:", result);
+        throw new Error("サーバーからプロジェクトIDが返されませんでした");
+      }
+      
       // キャッシュをクリア
       this.clearCache();
       

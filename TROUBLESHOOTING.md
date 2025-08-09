@@ -123,11 +123,50 @@ PGPORT=5433
 npm run dev
 ```
 
+#### 重要なログメッセージ
+
+1. **Transaction failed**: データベーストランザクションエラーの詳細
+   - `code`: PostgreSQLエラーコード
+   - `detail`: 具体的なエラー詳細
+   - `hint`: 解決のヒント
+
+2. **DataAgent logs**:
+   - `DataAgent.buildDesignInput`: データ構築の詳細
+   - `DataAgent.createProject - Request data`: 送信されるデータ
+   - `[FETCH] Request/Response`: HTTPリクエストの詳細
+
+3. **API logs**:
+   - `Starting project transaction`: トランザクション開始
+   - `Failed to create project - Full error`: 完全なエラー詳細
+
+#### PostgreSQLエラーコード
+
+- `23502`: NOT NULL制約違反
+- `23503`: 外部キー制約違反
+- `23505`: UNIQUE制約違反
+- `42P01`: テーブルが存在しない
+- `3D000`: データベースが存在しない
+- `08001`: 接続エラー
+
 エラーメッセージに以下が含まれる場合：
 - `ECONNREFUSED`: PostgreSQLが起動していない
 - `ENOTFOUND`: ホスト名が間違っている
 - `EACCES`: 権限不足
 - `relation "projects" does not exist`: テーブルが作成されていない
+
+### 8.1 詳細なデータベーステスト
+
+```bash
+# データベース接続と構造をテスト
+curl http://localhost:3000/api/debug/test-db-direct
+```
+
+このエンドポイントは以下をテストします：
+- データベース接続
+- テーブルの存在
+- テーブル構造
+- INSERT権限
+- UUID拡張機能
 
 ### 9. 完全リセット（最終手段）
 

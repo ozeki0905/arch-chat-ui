@@ -63,16 +63,29 @@ export async function POST(request: NextRequest) {
     }
 
     const designInput: TankFoundationDesignInput = body;
+    
+    // Ensure created_by has a default value
+    if (!designInput.project.created_by) {
+      designInput.project.created_by = 'system';
+    }
 
     const projectData = await withTransaction(async (client) => {
+      console.log("Starting project transaction with data:", {
+        projectName: designInput.project.name,
+        createdBy: designInput.project.created_by,
+        fullProject: designInput.project
+      });
+      
       // 1. Insert project
+      console.log("Inserting into projects table...");
       const projectResult = await client.query(
         `INSERT INTO projects (name, created_by) 
          VALUES ($1, $2) 
          RETURNING id`,
-        [designInput.project.name, designInput.project.created_by]
+        [designInput.project.name, designInput.project.created_by || 'system']
       );
       const projectId = projectResult.rows[0].id;
+      console.log("Project created with ID:", projectId);
 
       // 2. Insert site
       if (designInput.site) {
@@ -235,10 +248,80 @@ export async function POST(request: NextRequest) {
       projectName: projectData.projectName,
       message: "Project created successfully",
     });
-  } catch (error) {
-    console.error("Failed to create project:", error);
+  } catch (error: any) {
+    console.error("Failed to create project - Full error:", {
+      error,
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      hint: error?.hint,
+      stack: error?.stack
+    });
     
-    // Provide more specific error messages
+    // Handle PostgreSQL specific error codes
+    if (error?.code) {
+      switch (error.code) {
+        case '23505': // unique_violation
+          return NextResponse.json(
+            { 
+              error: "Duplicate project", 
+              details: `A project with this key already exists. ${error.detail || ''}`
+            },
+            { status: 409 }
+          );
+        
+        case '23503': // foreign_key_violation
+          return NextResponse.json(
+            { 
+              error: "Invalid reference", 
+              details: `Foreign key constraint violation: ${error.detail || error.message}`
+            },
+            { status: 400 }
+          );
+        
+        case '23502': // not_null_violation
+          const columnMatch = error.message?.match(/column "(\w+)"/)?.[1];
+          return NextResponse.json(
+            { 
+              error: "Missing required field", 
+              details: `Required field '${columnMatch || 'unknown'}' cannot be null`
+            },
+            { status: 400 }
+          );
+        
+        case '42P01': // undefined_table
+          return NextResponse.json(
+            { 
+              error: "Database tables not found", 
+              details: "Required database tables are missing. Please run: psql $DATABASE_URL < src/lib/schema.sql"
+            },
+            { status: 503 }
+          );
+        
+        case '3D000': // invalid_catalog_name
+        case '3F000': // invalid_schema_name
+          return NextResponse.json(
+            { 
+              error: "Database not found", 
+              details: "The database does not exist. Please create it using: createdb arch_chat_db"
+            },
+            { status: 503 }
+          );
+        
+        case '08001': // sqlclient_unable_to_establish_sqlconnection
+        case '08003': // connection_does_not_exist
+        case '08006': // connection_failure
+          return NextResponse.json(
+            { 
+              error: "Database connection failed", 
+              details: "Unable to connect to PostgreSQL. Please check if the database server is running."
+            },
+            { status: 503 }
+          );
+      }
+    }
+    
+    // Provide more specific error messages based on error message content
     if (error instanceof Error) {
       // Database connection errors
       if (error.message.includes("connect") || error.message.includes("ECONNREFUSED")) {
@@ -251,12 +334,12 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      // Database does not exist
-      if (error.message.includes("does not exist")) {
+      // Generic database does not exist
+      if (error.message.includes("database") && error.message.includes("does not exist")) {
         return NextResponse.json(
           { 
             error: "Database not found", 
-            details: "The database 'arch_chat_db' does not exist. Please create it using the schema.sql file."
+            details: error.message
           },
           { status: 503 }
         );
@@ -264,30 +347,24 @@ export async function POST(request: NextRequest) {
       
       // Table does not exist
       if (error.message.includes("relation") && error.message.includes("does not exist")) {
+        const tableMatch = error.message.match(/relation "(\w+)"/)?.[1];
         return NextResponse.json(
           { 
-            error: "Database tables not found", 
-            details: "Required database tables are missing. Please run the schema.sql file to create them."
+            error: "Database table not found", 
+            details: `Table '${tableMatch || 'unknown'}' does not exist. Please run the schema.sql file.`
           },
           { status: 503 }
         );
       }
-      
-      // Missing required fields
-      if (error.message.includes("null value in column")) {
-        const match = error.message.match(/column "(\w+)"/)?.[1];
-        return NextResponse.json(
-          { 
-            error: "Missing required field", 
-            details: `Required field '${match || 'unknown'}' is missing or null`
-          },
-          { status: 400 }
-        );
-      }
     }
     
+    // Default error response with all available details
     return NextResponse.json(
-      { error: "Failed to create project", details: error instanceof Error ? error.message : "Unknown error" },
+      { 
+        error: "Failed to create project", 
+        details: error?.message || error?.detail || "An unexpected error occurred. Check server logs for details.",
+        code: error?.code
+      },
       { status: 500 }
     );
   }

@@ -57,6 +57,20 @@ export async function withTransaction<T>(
     return result;
   } catch (error) {
     await client.query('ROLLBACK');
+    console.error('Transaction failed:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      // PostgreSQL specific error properties
+      code: (error as any)?.code,
+      detail: (error as any)?.detail,
+      hint: (error as any)?.hint,
+      where: (error as any)?.where,
+      schema: (error as any)?.schema,
+      table: (error as any)?.table,
+      column: (error as any)?.column,
+      constraint: (error as any)?.constraint
+    });
     throw error;
   } finally {
     client.release();
