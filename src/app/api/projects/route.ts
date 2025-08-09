@@ -52,7 +52,17 @@ export async function GET(request: NextRequest) {
 // POST /api/projects - Create new project with full tank foundation data
 export async function POST(request: NextRequest) {
   try {
-    const designInput: TankFoundationDesignInput = await request.json();
+    const body = await request.json();
+    
+    // Validate required fields
+    if (!body.project?.name) {
+      return NextResponse.json(
+        { error: "Project name is required", details: "Missing project.name field" },
+        { status: 400 }
+      );
+    }
+
+    const designInput: TankFoundationDesignInput = body;
 
     const projectData = await withTransaction(async (client) => {
       // 1. Insert project
@@ -227,6 +237,55 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Failed to create project:", error);
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      // Database connection errors
+      if (error.message.includes("connect") || error.message.includes("ECONNREFUSED")) {
+        return NextResponse.json(
+          { 
+            error: "Database connection failed", 
+            details: "Unable to connect to the database. Please check your database configuration and ensure PostgreSQL is running."
+          },
+          { status: 503 }
+        );
+      }
+      
+      // Database does not exist
+      if (error.message.includes("does not exist")) {
+        return NextResponse.json(
+          { 
+            error: "Database not found", 
+            details: "The database 'arch_chat_db' does not exist. Please create it using the schema.sql file."
+          },
+          { status: 503 }
+        );
+      }
+      
+      // Table does not exist
+      if (error.message.includes("relation") && error.message.includes("does not exist")) {
+        return NextResponse.json(
+          { 
+            error: "Database tables not found", 
+            details: "Required database tables are missing. Please run the schema.sql file to create them."
+          },
+          { status: 503 }
+        );
+      }
+      
+      // Missing required fields
+      if (error.message.includes("null value in column")) {
+        const match = error.message.match(/column "(\w+)"/)?.[1];
+        return NextResponse.json(
+          { 
+            error: "Missing required field", 
+            details: `Required field '${match || 'unknown'}' is missing or null`
+          },
+          { status: 400 }
+        );
+      }
+    }
+    
     return NextResponse.json(
       { error: "Failed to create project", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

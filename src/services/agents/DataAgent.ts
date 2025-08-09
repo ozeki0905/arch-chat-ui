@@ -39,7 +39,8 @@ export class DataAgent {
       }
     } catch (error) {
       console.error("Failed to save project data:", error);
-      return { projectId: projectId || "", success: false };
+      // Re-throw the error to propagate it to the UI
+      throw error;
     }
   }
 
@@ -51,28 +52,48 @@ export class DataAgent {
     projectInfo: Partial<ExtendedProjectInfo>,
     designInput?: Partial<TankFoundationDesignInput>
   ): Promise<{ projectId: string; success: boolean }> {
-    // ExtractedItemsとProjectInfoからTankFoundationDesignInputを構築
-    const fullDesignInput = this.buildDesignInput(extractedItems, projectInfo, designInput);
+    try {
+      // ExtractedItemsとProjectInfoからTankFoundationDesignInputを構築
+      const fullDesignInput = this.buildDesignInput(extractedItems, projectInfo, designInput);
 
-    const response = await fetch(`${this.config.apiBaseUrl}/projects`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(fullDesignInput)
-    });
+      const response = await fetch(`${this.config.apiBaseUrl}/projects`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fullDesignInput)
+      });
 
-    if (!response.ok) {
-      throw new Error("Failed to create project");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Failed to create project:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          sentData: fullDesignInput
+        });
+        
+        // Provide user-friendly error messages
+        if (response.status === 503) {
+          throw new Error("データベース接続エラー: データベースに接続できません。管理者にお問い合わせください。");
+        } else if (response.status === 400) {
+          throw new Error(`入力エラー: ${errorData.details || errorData.error || "必須項目が不足しています"}`);
+        } else {
+          throw new Error(errorData.details || errorData.error || "プロジェクトの作成に失敗しました");
+        }
+      }
+
+      const result = await response.json();
+      
+      // キャッシュをクリア
+      this.clearCache();
+      
+      return { 
+        projectId: result.projectId, 
+        success: true 
+      };
+    } catch (error) {
+      console.error("Error in createProject:", error);
+      throw error;
     }
-
-    const result = await response.json();
-    
-    // キャッシュをクリア
-    this.clearCache();
-    
-    return { 
-      projectId: result.projectId, 
-      success: true 
-    };
   }
 
   /**
@@ -243,21 +264,20 @@ export class DataAgent {
     const input: Partial<TankFoundationDesignInput> = existingInput || {};
 
     // ProjectInfoから基本情報を設定
-    if (projectInfo.projectName || projectInfo.siteName) {
-      input.project = {
-        ...input.project,
-        name: projectInfo.projectName || input.project?.name || "",
-        project_id: input.project?.project_id || `TF-${Date.now()}`
-      };
-    }
+    // プロジェクト情報は必須なので、デフォルト値を設定
+    input.project = {
+      project_id: input.project?.project_id || `TF-${Date.now()}`,
+      name: projectInfo.projectName || input.project?.name || "新規プロジェクト",
+      created_by: input.project?.created_by || "system",
+      ...input.project
+    };
 
-    if (projectInfo.siteAddress || projectInfo.siteName) {
-      input.site = {
-        ...input.site,
-        site_name: projectInfo.siteName || input.site?.site_name || "",
-        location: projectInfo.siteAddress || input.site?.location || ""
-      };
-    }
+    // サイト情報もデフォルト値を設定
+    input.site = {
+      site_name: projectInfo.siteName || input.site?.site_name || "未設定",
+      location: projectInfo.siteAddress || input.site?.location || "未設定",
+      ...input.site
+    };
 
     // ExtractedItemsから詳細情報を設定
     extractedItems.forEach(item => {

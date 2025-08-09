@@ -140,6 +140,12 @@ export class OrchestrationService {
     } catch (error) {
       console.error("Orchestration error:", error);
       
+      // Extract error message
+      let errorMessage = "処理中にエラーが発生しました。";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       return {
         extractedItems,
         projectInfo,
@@ -151,11 +157,11 @@ export class OrchestrationService {
         actions: [{
           type: "show_message",
           payload: { 
-            message: "処理中にエラーが発生しました。もう一度お試しください。",
+            message: errorMessage,
             type: "error"
           }
         }],
-        responseMessage: "申し訳ございません。処理中にエラーが発生しました。"
+        responseMessage: errorMessage
       };
     }
   }
