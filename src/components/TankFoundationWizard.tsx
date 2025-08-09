@@ -165,21 +165,61 @@ export function TankFoundationWizard({
     setWizardState(prev => ({ ...prev, isCalculating: true }));
     
     try {
-      // TODO: Call calculation API endpoint
-      // const response = await fetch('/v1/design/run', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(wizardState.data)
-      // });
+      // Save project data to database
+      const projectResponse = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(wizardState.data)
+      });
       
-      // For now, just complete after a delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (!projectResponse.ok) {
+        throw new Error('Failed to save project');
+      }
       
+      const { projectId } = await projectResponse.json();
+      
+      // Create calculation run
+      const calcResponse = await fetch('/api/calc-runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          designInput: wizardState.data
+        })
+      });
+      
+      if (!calcResponse.ok) {
+        throw new Error('Failed to create calculation run');
+      }
+      
+      const { runId } = await calcResponse.json();
+      
+      // Update wizard state with IDs
+      setWizardState(prev => ({ 
+        ...prev, 
+        runId,
+        data: {
+          ...prev.data,
+          project: {
+            ...prev.data.project!,
+            project_id: projectId
+          }
+        }
+      }));
+      
+      // Complete the wizard
       if (wizardState.data as TankFoundationDesignInput) {
-        onComplete(wizardState.data as TankFoundationDesignInput);
+        onComplete({
+          ...wizardState.data,
+          project: {
+            ...wizardState.data.project!,
+            project_id: projectId
+          }
+        } as TankFoundationDesignInput);
       }
     } catch (error) {
       console.error('Calculation error:', error);
+      alert('計算の実行に失敗しました。もう一度お試しください。');
     } finally {
       setWizardState(prev => ({ ...prev, isCalculating: false }));
     }
