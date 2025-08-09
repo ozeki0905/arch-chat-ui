@@ -133,6 +133,8 @@ export default function ChatInterface() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isAutoScrollingRef = useRef(false);
+  const userHasScrolledRef = useRef(false);
   
   // セッション管理
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
@@ -162,9 +164,27 @@ export default function ChatInterface() {
   const [projectInfo, setProjectInfo] = useState<Partial<ExtendedProjectInfo>>({});
   const [showPhase2Form, setShowPhase2Form] = useState(false);
   
-  // 自動スクロール
+  // 自動スクロールの改善版
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // 自動スクロール中フラグをチェックして無限ループを防ぐ
+    if (isAutoScrollingRef.current) return;
+    
+    // ユーザーが手動でスクロールした場合は自動スクロールを停止
+    if (userHasScrolledRef.current) return;
+    
+    const scrollToBottom = () => {
+      isAutoScrollingRef.current = true;
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      // スムーズスクロールの完了を待つ
+      setTimeout(() => {
+        isAutoScrollingRef.current = false;
+      }, 1000);
+    };
+    
+    // 少し遅延を入れてDOMの更新を待つ
+    const timeoutId = setTimeout(scrollToBottom, 100);
+    
+    return () => clearTimeout(timeoutId);
   }, [messages.length, showPhase2Form, showForm]); // メッセージ数やフォーム表示が変わった時にスクロール
   
   // セッションの初期化と読み込み
@@ -275,6 +295,9 @@ export default function ChatInterface() {
     setFiles([]);
     setIsLoading(true);
     setShowForm(null);
+    
+    // ユーザーが新しいメッセージを送信したときは自動スクロールを再開
+    userHasScrolledRef.current = false;
 
     try {
       // Orchestration Serviceで処理
@@ -603,13 +626,35 @@ export default function ChatInterface() {
     setSessions(prev => [newSession, ...prev.map(s => ({ ...s, isActive: false }))]);
   };
   
-  const handleDeleteSession = (sessionId: string): void => {
-    deleteSession(sessionId);
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
-    
-    // 削除したセッションが現在のセッションの場合は新規セッションを作成
-    if (currentSession?.id === sessionId) {
-      handleNewSession();
+  const handleDeleteSession = async (sessionId: string): Promise<void> => {
+    try {
+      // APIエンドポイントを呼び出してセッションを削除
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete session');
+      }
+      
+      // ローカルストレージからも削除
+      deleteSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      setSessionSummaries(prev => prev.filter(s => s.id !== sessionId));
+      
+      // 削除したセッションが現在のセッションの場合は新規セッションを作成
+      if (currentSession?.id === sessionId) {
+        handleNewSession();
+      }
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      // エラーメッセージを表示（オプション）
+      const errorMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "セッションの削除に失敗しました。しばらくしてから再度お試しください。",
+      };
+      setMessages(prev => [...prev, errorMsg]);
     }
   };
   
@@ -798,7 +843,17 @@ export default function ChatInterface() {
             causes the element to stretch to accommodate its children and prevents
             scrollbars from appearing when content overflows.
           */}
-          <ScrollArea className="flex-1 min-h-0 p-4 sm:p-6">
+          <ScrollArea 
+            ref={scrollAreaRef}
+            className="flex-1 min-h-0 p-4 sm:p-6 scroll-smooth-optimized"
+            onScroll={(e) => {
+              if (!isAutoScrollingRef.current) {
+                const target = e.target as HTMLElement;
+                const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
+                userHasScrolledRef.current = !isAtBottom;
+              }
+            }}
+          >
             <div className="space-y-4 max-w-4xl mx-auto animate-slide-up">
               {messages.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
@@ -1149,7 +1204,7 @@ function MobileProgressPanel({ phases, phaseProgress }: {
 }
 
 // --- サブ：チャットバブル ---
-function ChatBubble({ role, content, files }: { role: Role; content: string; files?: UploadedFile[] }) {
+const ChatBubble = React.memo(function ChatBubble({ role, content, files }: { role: Role; content: string; files?: UploadedFile[] }) {
   const isUser = role === "user";
   return (
     <div className={`flex items-start gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
@@ -1177,4 +1232,4 @@ function ChatBubble({ role, content, files }: { role: Role; content: string; fil
       )}
     </div>
   );
-}
+});

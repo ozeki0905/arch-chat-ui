@@ -21,6 +21,14 @@ import { ChatSession, SessionSummary } from "@/types/chat";
 import { formatDistanceToNow } from "@/utils/dateUtils";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ChatHistorySidebarProps {
   sessions: SessionSummary[];
@@ -40,6 +48,8 @@ export function ChatHistorySidebar({
   className
 }: ChatHistorySidebarProps) {
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+  const [sessionToDelete, setSessionToDelete] = React.useState<string | null>(null);
   
   const filteredSessions = useMemo(() => 
     sessions.filter(session =>
@@ -106,7 +116,7 @@ export function ChatHistorySidebar({
     
     return (
       <Card
-        className={`p-3 cursor-pointer transition-all hover:shadow-md ${
+        className={`group p-3 cursor-pointer transition-all hover:shadow-md ${
           isActive ? "border-primary bg-primary/5" : "hover:bg-muted/50"
         }`}
         onClick={() => onSelectSession(session.id)}
@@ -138,7 +148,8 @@ export function ChatHistorySidebar({
             className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
-              onDeleteSession(session.id);
+              setSessionToDelete(session.id);
+              setDeleteConfirmOpen(true);
             }}
           >
             <Trash2 className="h-3 w-3" />
@@ -208,6 +219,38 @@ export function ChatHistorySidebar({
           アーカイブされた履歴
         </Button>
       </div>
+      
+      {/* 削除確認ダイアログ */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>チャット履歴を削除しますか？</DialogTitle>
+            <DialogDescription>
+              この操作は取り消せません。選択したチャット履歴とその内容が完全に削除されます。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(false)}
+            >
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (sessionToDelete) {
+                  onDeleteSession(sessionToDelete);
+                  setDeleteConfirmOpen(false);
+                  setSessionToDelete(null);
+                }
+              }}
+            >
+              削除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
