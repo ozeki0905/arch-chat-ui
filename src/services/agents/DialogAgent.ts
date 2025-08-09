@@ -227,6 +227,20 @@ JSON形式で回答してください。`
         case "floorAreaRatio":
           updated.floorAreaRatio = parseFloat(item.value || "0") || undefined;
           break;
+        // Tank information
+        case "tankCapacity":
+          // Remove commas from the value before parsing
+          updated.tankCapacity = parseFloat((item.value || "0").replace(/,/g, "")) || undefined;
+          break;
+        case "tankContent":
+          updated.tankContent = item.value || undefined;
+          break;
+        case "tankDiameter":
+          updated.tankDiameter = parseFloat((item.value || "0").replace(/,/g, "")) || undefined;
+          break;
+        case "tankHeight":
+          updated.tankHeight = parseFloat((item.value || "0").replace(/,/g, "")) || undefined;
+          break;
       }
     });
 

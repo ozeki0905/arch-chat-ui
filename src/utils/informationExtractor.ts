@@ -170,6 +170,12 @@ function normalizeValue(key: string, rawValue: string): string | null {
       }
       return rawValue;
     
+    case "tankCapacity":
+    case "tankDiameter":
+    case "tankHeight":
+      // タンク関連の数値はカンマを除去
+      return rawValue.replace(/,/g, "");
+    
     default:
       return rawValue.trim();
   }
