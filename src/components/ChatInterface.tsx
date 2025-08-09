@@ -357,21 +357,21 @@ export default function ChatInterface() {
 
       const data = await response.json();
       
-      const assistantMsg: ChatMessage = {
+      const apiAssistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
         content: data.message,
       };
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => [...prev, apiAssistantMsg]);
       
     } catch (error) {
       console.error("Chat API error:", error);
-      const assistantMsg: ChatMessage = {
+      const errorAssistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
         content: "申し訳ございません。一時的なエラーが発生しました。しばらくしてから再度お試しください。",
       };
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => [...prev, errorAssistantMsg]);
     } finally {
       setIsLoading(false);
     }
@@ -405,7 +405,7 @@ export default function ChatInterface() {
     setRequirements(updatedRequirements);
     
     // アシスタントメッセージを追加
-    const assistantMsg: ChatMessage = {
+    const analysisAssistantMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "assistant",
       content: `ドキュメントから以下の情報を抽出しました:\n\n${items
@@ -413,7 +413,7 @@ export default function ChatInterface() {
         .map(item => `• ${item.label}: ${item.value}`)
         .join("\n")}\n\n抽出された情報を確認し、不足している項目があれば追加入力してください。`,
     };
-    setMessages(prev => [...prev, assistantMsg]);
+    setMessages(prev => [...prev, analysisAssistantMsg]);
     
     // フェーズ1完了時、自動的にフェーズ2へ
     if (currentPhaseLocal?.key === "p1") {
@@ -437,12 +437,12 @@ export default function ChatInterface() {
     }));
     
     // アシスタントメッセージを追加
-    const assistantMsg: ChatMessage = {
+    const phase2AssistantMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "assistant",
       content: `タンク基礎設計データが確定しました:\n\n• プロジェクト: ${designData.project.name}\n• タンク容量: ${designData.tank.capacity_kl} kL\n• タンク寸法: φ${designData.tank.diameter_m}m × H${designData.tank.height_m}m\n• 内容物: ${designData.tank.content_type}\n• 耐震レベル: ${designData.criteria.seismic_level}\n• 法的分類: ${designData.regulations.legal_classification}\n\n設計計算が実行されました。次のフェーズで結果を確認します。`,
     };
-    setMessages(prev => [...prev, assistantMsg]);
+    setMessages(prev => [...prev, phase2AssistantMsg]);
     
     // 次のフェーズへ
     goNextPhase();
@@ -660,13 +660,12 @@ export default function ChatInterface() {
       }
       
       // メッセージを追加
-      const assistantMsg: ChatMessage = {
+      const formAssistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
         content: orchestrationResult.responseMessage,
       };
-      setMessages(prev => [...prev, assistantMsg]);
-      }
+      setMessages(prev => [...prev, formAssistantMsg]);
     } catch (error) {
       console.error("Form processing error:", error);
     } finally {
