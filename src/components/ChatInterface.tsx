@@ -20,8 +20,9 @@ import {
 import { DocumentAnalysisDialog } from "@/components/DocumentAnalysisDialog";
 import { DocumentAnalysisResult, ExtractedItem, ProjectInfo } from "@/types/extraction";
 import { analyzeDocument } from "@/utils/documentParser";
-import { Phase2Form } from "@/components/Phase2Form";
+import { TankFoundationWizard } from "@/components/TankFoundationWizard";
 import { DesignPolicy } from "@/types/designPolicy";
+import { TankFoundationDesignInput } from "@/types/tankFoundationDesign";
 import { ChatSession, ChatMessage as SessionChatMessage } from "@/types/chat";
 import { loadSessions, saveSession, generateSessionTitle, deleteSession, loadSessionSummaries } from "@/utils/sessionStorage";
 import { ChatHistorySidebar, MobileChatHistorySidebar } from "@/components/ChatHistorySidebar";
@@ -391,14 +392,14 @@ export default function ChatInterface() {
     }
   };
   
-  // フェーズ2: 設計方針の確定
-  const handlePhase2Complete = (policy: DesignPolicy): void => {
+  // フェーズ2: タンク基礎設計の確定
+  const handlePhase2Complete = (designData: TankFoundationDesignInput): void => {
     setShowPhase2Form(false);
     
-    // 設計方針を設計条件に反映
+    // 設計データから設計条件を更新
     setDesign(prev => prev.map(d => {
-      if (d.key === "structureType" && policy.structureType) {
-        return { ...d, value: policy.structureType, status: "set" };
+      if (d.key === "structureType") {
+        return { ...d, value: "RC造（タンク基礎）", status: "set" };
       }
       return d;
     }));
@@ -407,7 +408,7 @@ export default function ChatInterface() {
     const assistantMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: `設計方針が確定しました:\n\n• 基礎形式: ${policy.foundationType}\n• 耐震レベル: ${policy.seismicLevel}\n• 構造種別: ${policy.structureType}\n• 耐火性能: ${policy.fireResistance}\n\n次のフェーズで詳細な設計条件を設定します。`,
+      content: `タンク基礎設計データが確定しました:\n\n• プロジェクト: ${designData.project.name}\n• タンク容量: ${designData.tank.capacity_kl} kL\n• タンク寸法: φ${designData.tank.diameter_m}m × H${designData.tank.height_m}m\n• 内容物: ${designData.tank.content_type}\n• 耐震レベル: ${designData.criteria.seismic_level}\n• 法的分類: ${designData.regulations.legal_classification}\n\n設計計算が実行されました。次のフェーズで結果を確認します。`,
     };
     setMessages(prev => [...prev, assistantMsg]);
     
@@ -759,8 +760,8 @@ export default function ChatInterface() {
               
               {/* フェーズ2フォームの表示 */}
               {showPhase2Form && currentPhaseLocal?.key === "p2" && (
-                <div className="max-w-3xl mx-auto">
-                  <Phase2Form
+                <div className="max-w-4xl mx-auto">
+                  <TankFoundationWizard
                     projectInfo={projectInfo}
                     onComplete={handlePhase2Complete}
                     onBack={() => setShowPhase2Form(false)}
@@ -795,12 +796,12 @@ export default function ChatInterface() {
                     <CardContent className="py-6">
                       <div className="text-center">
                         <Settings className="h-8 w-8 mx-auto mb-3 text-primary" />
-                        <h3 className="text-lg font-semibold mb-2">設計方針を決定する</h3>
+                        <h3 className="text-lg font-semibold mb-2">タンク基礎設計を開始する</h3>
                         <p className="text-sm text-muted-foreground mb-4">
-                          抽出された情報をもとに、最適な設計基準と方針を推定します
+                          タンク仕様、地盤条件、設計基準を入力し、基礎設計計算を実行します
                         </p>
                         <Button onClick={() => setShowPhase2Form(true)}>
-                          設計方針の検討を開始
+                          タンク基礎設計ウィザードを開始
                         </Button>
                       </div>
                     </CardContent>
